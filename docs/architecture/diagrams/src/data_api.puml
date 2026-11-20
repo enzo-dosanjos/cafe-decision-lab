@@ -1,0 +1,61 @@
+@startuml data_api
+title Cafe Decision Lab - Dataset generation and preparation
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "data.generate" as pkg_data_generate {
+class "ExplorationManager" as data_generate_ExplorationManager {
+  + __init__(catalogue: Sequence[Action], seed: int, *, mode: str)
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+class "generate.py" as data_generate_functions <<module>> {
+  + build_dataset(scenarios: Sequence[Scenario], customer_policy: CustomerPolicy, config: Config, exploration_seeds: Mapping[str,\n    Sequence[int]], output_dir: Path, manifest: ArtifactManifest) -> list[PeriodRecord]
+}
+}
+package "data.splits" as pkg_data_splits {
+class "splits.py" as data_splits_functions <<module>> {
+  + make_split_manifest(scenario_ids: Sequence[str], *, seed: int, fractions: tuple[float,\n    float, float] = (0.70, 0.15, 0.15)) -> dict[str, str]
+  + validate_splits(records: Sequence[PeriodRecord], splits: Mapping[str,\n    str], excluded_ids: Sequence[str]) -> None
+}
+}
+package "data.windows" as pkg_data_windows {
+class "windows.py" as data_windows_functions <<module>> {
+  + make_windows(records: Sequence[PeriodRecord], splits: Mapping[str,\n    str], *, split: str, H: int) -> DatasetArrays
+}
+}
+package "data.scaling" as pkg_data_scaling {
+class "scaling.py" as data_scaling_functions <<module>> {
+  + fit_scalers(records: Sequence[PeriodRecord], splits: Mapping[str, str]) -> ScalerStats
+  + save_scalers(scalers: ScalerStats, path: Path) -> None
+  + load_scalers(path: Path, expected_training_ids: Sequence[str]) -> ScalerStats
+}
+}
+package "data.storage" as pkg_data_storage {
+class "storage.py" as data_storage_functions <<module>> {
+  + save_records(records: Sequence[PeriodRecord], path: Path,\n    *, splits: Mapping[str, str] | None = None) -> None
+  + load_records(path: Path) -> list[PeriodRecord]
+  + save_arrays(arrays: DatasetArrays, path: Path) -> None
+  + load_arrays(path: Path, *, H: int, F: int) -> DatasetArrays
+  + save_manifest(manifest: ArtifactManifest, splits: Mapping[str, str], directory: Path) -> None
+  + load_manifest(directory: Path, expected: ArtifactManifest) -> tuple[ArtifactManifest, dict[str, str]]
+}
+}
+class "customers.policy" as ref_customers_policy <<reference>>
+class "managers.base" as ref_managers_base <<reference>>
+class "simulation.scenarios" as ref_simulation_scenarios <<reference>>
+class "simulation.simulator" as ref_simulation_simulator <<reference>>
+pkg_data_generate ..> ref_simulation_simulator : uses
+pkg_data_generate ..> ref_simulation_scenarios : uses
+pkg_data_generate ..> ref_managers_base : uses
+pkg_data_generate ..> ref_customers_policy : uses
+pkg_data_generate ..> pkg_data_storage : uses
+data_generate_ExplorationManager --|> ref_managers_base
+@enduml

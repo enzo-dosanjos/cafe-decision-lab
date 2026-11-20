@@ -1,0 +1,78 @@
+@startuml simulation_api
+title Cafe Decision Lab - Simulation and customer learning
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "simulation.scenarios" as pkg_simulation_scenarios {
+class "scenarios.py" as simulation_scenarios_functions <<module>> {
+  + generate_scenario(config: Config, scenario_id: str, group: str, seed: int) -> Scenario
+  + save_scenario(scenario: Scenario, path: Path) -> None
+  + load_scenario(path: Path) -> Scenario
+  + customer_rng(scenario: Scenario, customer_id: int, minute: int, phase: str) -> Generator
+}
+}
+package "simulation.simulator" as pkg_simulation_simulator {
+class "CafeState" as simulation_simulator_CafeState <<dataclass>> {
+  action: Action
+  inventory: Array
+  queue: deque[CustomerInstance]
+  service_credit: float
+}
+class "CustomerInstance" as simulation_simulator_CustomerInstance <<dataclass>> {
+  arrival: Arrival
+  cafe_id: int
+  product_id: int
+  elapsed_wait: int
+  pending: PendingTransition | None
+}
+class "simulator.py" as simulation_simulator_functions <<module>> {
+  + run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str,\n    learn: bool = False, epsilon: float = 0.0, exploration_seed: int | None = None) -> DayResult
+  + build_observation(period_index: int, previous: PeriodRecord | None,\n    queue_lengths: tuple[int, int], config: Config) -> Observation
+  + period_profit(action: Action, sales: Array, unit_costs: Array, staff_period_cost: float) -> float
+}
+}
+package "customers.policy" as pkg_customers_policy {
+class "PendingTransition" as customers_policy_PendingTransition <<dataclass>> {
+  type_id: int
+  state: StateKey
+  action_id: int
+}
+class "CustomerPolicy" as customers_policy_CustomerPolicy {
+  tables: dict
+  frozen: bool
+  --
+  + __init__(tables: dict | None = None, *, frozen: bool = False)
+  + choose(type_id: int, state: StateKey, valid_actions: Sequence[int],\n    *, epsilon: float, rng: Generator) -> int
+  + update(pending: PendingTransition, reward: float, next_state: StateKey | None, next_valid_actions: Sequence[int],\n    *, terminal: bool, alpha: float, gamma: float) -> None
+  + freeze() -> CustomerPolicy
+  + fingerprint() -> str
+}
+class "policy.py" as customers_policy_functions <<module>> {
+  + encode_state(view: CustomerView) -> StateKey
+  + valid_actions(view: CustomerView, config: Config) -> tuple[int, ...]
+  + save_policy(policy: CustomerPolicy, path: Path, manifest: ArtifactManifest) -> None
+  + load_policy(path: Path, expected: ArtifactManifest) -> CustomerPolicy
+}
+}
+package "customers.training" as pkg_customers_training {
+class "training.py" as customers_training_functions <<module>> {
+  + train_customers(config: Config, train_scenarios: Sequence[Scenario], validation_scenarios: Sequence[Scenario],\n    managers: Sequence[Manager], output_dir: Path, manifest: ArtifactManifest) -> CustomerPolicy
+  + evaluate_customers(policy: CustomerPolicy, scenarios: Sequence[Scenario],\n    managers: Sequence[Manager], config: Config) -> list[dict]
+  + check_behavior(policy: CustomerPolicy, config: Config) -> dict[str, bool]
+}
+}
+class "managers.base" as ref_managers_base <<reference>>
+pkg_simulation_simulator ..> pkg_simulation_scenarios : uses
+pkg_simulation_simulator ..> pkg_customers_policy : uses
+pkg_simulation_simulator ..> ref_managers_base : uses
+pkg_customers_training ..> pkg_customers_policy : uses
+pkg_customers_training ..> pkg_simulation_simulator : uses
+pkg_customers_training ..> ref_managers_base : uses
+@enduml

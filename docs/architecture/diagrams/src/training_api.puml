@@ -1,0 +1,37 @@
+@startuml training_api
+title Cafe Decision Lab - Neural training and forecast evaluation
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "models.training" as pkg_models_training {
+class "training.py" as models_training_functions <<module>> {
+  + train_predictor(model_name: str, train: DatasetArrays, validation: DatasetArrays, scalers: ScalerStats, config: Config,\n    *, seed: int, device: str, output_dir: Path, manifest: ArtifactManifest) -> OutcomePredictor
+  + outcome_loss(predictions: Tensor, targets: Tensor, target_mask: Tensor, target_std: Tensor) -> Tensor
+  + save_checkpoint(model: OutcomePredictor, path: Path, config: Config,\n    seed: int, manifest: ArtifactManifest) -> None
+  + load_checkpoint(path: Path, expected: ArtifactManifest, *, device: str = 'cpu') -> OutcomePredictor
+}
+}
+package "models.evaluation" as pkg_models_evaluation {
+class "evaluation.py" as models_evaluation_functions <<module>> {
+  + evaluate_forecasts(model: OutcomePredictor, arrays: DatasetArrays,\n    *, batch_size: int = 128) -> tuple[list[dict], dict[str, float]]
+}
+}
+class "data.scaling" as ref_data_scaling <<reference>>
+class "data.storage" as ref_data_storage <<reference>>
+class "models.base" as ref_models_base <<reference>>
+class "models.lstm" as ref_models_lstm <<reference>>
+class "models.mlp" as ref_models_mlp <<reference>>
+pkg_models_training ..> ref_models_base : uses
+pkg_models_training ..> ref_models_mlp : uses
+pkg_models_training ..> ref_models_lstm : uses
+pkg_models_training ..> ref_data_storage : uses
+pkg_models_training ..> ref_data_scaling : uses
+pkg_models_evaluation ..> ref_models_base : uses
+@enduml

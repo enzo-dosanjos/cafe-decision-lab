@@ -1,0 +1,85 @@
+@startuml cafe_architecture
+title Cafe Decision Lab - Package Architecture
+left to right direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam packageStyle rectangle
+skinparam componentBackgroundColor #EFF6FF
+skinparam componentBorderColor #3B82F6
+skinparam ArrowColor #475569
+
+component "cli.py\nCommand dispatch and assembly" as CLI
+package "simulation/" {
+  component "scenarios.py\nsimulator.py\nShared market environment" as Simulation
+}
+package "customers/" {
+  component "policy.py\nCustomer decisions and Q-tables" as Customers
+  component "training.py\nQ-learning orchestration" as CustomerTrain
+}
+package "managers/" {
+  component "base.py + fixed.py + adaptive.py\nmlp.py + lstm.py + selection.py" as Managers
+}
+package "data/" {
+  component "generate.py\nExploratory simulation rollouts" as Generate
+  component "splits.py | windows.py\nscaling.py | storage.py" as Prepare
+}
+package "models/" {
+  component "base.py\nOutcomePredictor" as Predictor
+  component "mlp.py | lstm.py\nSeparate predictor subclasses" as Predictors
+  component "training.py\nNeural training" as Train
+  component "evaluation.py\nForecast errors" as Forecast
+}
+component "evaluate.py\nAll-manager validation selection\nand paired business evaluation" as Evaluate
+component "report.py\nStatic figures and summaries" as Report
+package "Shared definitions" {
+  component "contracts.py | config.py\nTypes, field order, catalogue, settings" as Shared
+}
+folder "artifacts/<experiment-id>/" as Artifacts {
+  artifact "scenarios/ | customers/\ndataset/ | models/\nmanifest.json | selection.json" as Saved
+}
+folder "results/<evaluation-id>/" as Results {
+  artifact "Period/day/forecast CSVs\nSummary, figures, interpretation" as Output
+}
+
+CLI --> CustomerTrain
+CLI --> Generate
+CLI --> Train
+CLI --> Evaluate
+CLI --> Report
+CLI --> Shared : configuration
+CustomerTrain --> Simulation : training days
+Simulation --> Managers : Manager interface only
+Simulation --> Customers : customer-visible state / decisions
+CustomerTrain --> Customers : update and freeze Q-tables
+Managers --> Predictor : neural selector only
+Predictors --|> Predictor : inherit
+Generate --> Simulation : generate schedules / run_day
+Generate --> Prepare : split and build arrays
+Train --> Predictors : fit
+Train --> Prepare : load prepared arrays
+Forecast --> Predictor : predict
+Evaluate --> Simulation : paired rollouts
+CLI --> Forecast : forecast tests
+
+Generate ..> Saved : schedules and dataset
+CustomerTrain ..> Saved : frozen Q-tables
+Train ..> Saved : checkpoints
+Saved ..> Evaluate : policies, models, test inputs
+Evaluate ..> Saved : validation selection
+Evaluate ..> Output : measured outcomes
+Output ..> Report : read
+Report ..> Output : figures and summaries
+
+note bottom of Simulation
+  Simulation owns private schedule and market state.
+  Managers receive pre-decision history only.
+  No candidate-action simulation by managers.
+end note
+note bottom of Prepare
+  Split scenario groups before windows.
+  Padding, masks, keyed records and lineage checks.
+  Fit scalers on training records only.
+  Transform modules do not import simulation.
+end note
+@enduml

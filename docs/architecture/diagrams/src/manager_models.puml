@@ -1,0 +1,95 @@
+@startuml manager_models
+title Cafe Decision Lab - Managers and neural predictor contracts
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "managers.base" as pkg_managers_base {
+abstract class "Manager" as managers_base_Manager {
+  last_decision: DecisionInfo | None
+  --
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+}
+package "managers.fixed" as pkg_managers_fixed {
+class "FixedManager" as managers_fixed_FixedManager {
+  + __init__(action: Action)
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+}
+package "managers.adaptive" as pkg_managers_adaptive {
+class "AdaptiveManager" as managers_adaptive_AdaptiveManager {
+  + __init__(catalogue: Sequence[Action], config: Config, *,\n    alpha: float, buffer: float, queue_threshold: int)
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+}
+package "managers.mlp" as pkg_managers_mlp {
+class "MLPManager" as managers_mlp_MLPManager {
+  + __init__(predictor: MLPPredictor, catalogue: Sequence[Action], config: Config)
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+}
+package "managers.lstm" as pkg_managers_lstm {
+class "LSTMManager" as managers_lstm_LSTMManager {
+  + __init__(predictor: LSTMPredictor, catalogue: Sequence[Action], config: Config)
+  + reset() -> None
+  + choose(history: Array) -> Action
+}
+}
+package "managers.selection" as pkg_managers_selection {
+class "selection.py" as managers_selection_functions <<module>> {
+  + select_action(predictor: OutcomePredictor, history: Array, catalogue: Sequence[Action], unit_costs: Array,\n    staff_period_cost: float, abandonment_limit: float) -> tuple[Action, DecisionInfo]
+}
+}
+package "models.base" as pkg_models_base {
+abstract class "OutcomePredictor" as models_base_OutcomePredictor {
+  scalers: registered tensor buffers
+  --
+  + __init__(scalers: ScalerStats)
+  + forward(raw_history: Tensor, raw_actions: Tensor) -> Tensor
+  + predict(raw_history: Tensor, raw_actions: Tensor) -> Tensor
+  + forward_logits(scaled_history: Tensor, scaled_actions: Tensor) -> Tensor
+}
+}
+package "models.mlp" as pkg_models_mlp {
+class "MLPPredictor" as models_mlp_MLPPredictor {
+  + __init__(scalers: ScalerStats, *, H: int = 4, F: int = 30, hidden_sizes: tuple[int, int] = (64, 32))
+  + forward_logits(scaled_history: Tensor, scaled_actions: Tensor) -> Tensor
+}
+}
+package "models.lstm" as pkg_models_lstm {
+class "LSTMPredictor" as models_lstm_LSTMPredictor {
+  + __init__(scalers: ScalerStats, *, F: int = 30, hidden_size: int = 32, head_size: int = 32)
+  + forward_logits(scaled_history: Tensor, scaled_actions: Tensor) -> Tensor
+}
+}
+pkg_managers_fixed ..> pkg_managers_base : uses
+managers_fixed_FixedManager --|> managers_base_Manager
+pkg_managers_adaptive ..> pkg_managers_base : uses
+managers_adaptive_AdaptiveManager --|> managers_base_Manager
+pkg_managers_mlp ..> pkg_managers_base : uses
+pkg_managers_mlp ..> pkg_managers_selection : uses
+pkg_managers_mlp ..> pkg_models_mlp : uses
+managers_mlp_MLPManager --|> managers_base_Manager
+pkg_managers_lstm ..> pkg_managers_base : uses
+pkg_managers_lstm ..> pkg_managers_selection : uses
+pkg_managers_lstm ..> pkg_models_lstm : uses
+managers_lstm_LSTMManager --|> managers_base_Manager
+pkg_managers_selection ..> pkg_models_base : uses
+pkg_models_mlp ..> pkg_models_base : uses
+models_mlp_MLPPredictor --|> models_base_OutcomePredictor
+pkg_models_lstm ..> pkg_models_base : uses
+models_lstm_LSTMPredictor --|> models_base_OutcomePredictor
+managers_mlp_MLPManager o--> models_mlp_MLPPredictor : contains
+managers_lstm_LSTMManager o--> models_lstm_LSTMPredictor : contains
+@enduml

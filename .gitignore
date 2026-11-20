@@ -1,0 +1,40 @@
+# Local editor and assistant state
+.idea/
+.vscode/
+.agents/
+.codex/
+.aws/
+.DS_Store
+
+# Machine-specific notes and credentials
+docs/local/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Experiment outputs (architecture SVGs are intentionally tracked)
+artifacts/
+runs/
+results/
+tmp/
+*.log
+
+# Local project references
+/AGENTS.md
+/docs/specifications/

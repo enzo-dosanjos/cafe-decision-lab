@@ -1,0 +1,70 @@
+@startuml orchestration_api
+title Cafe Decision Lab - Business evaluation, reports and CLI
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "evaluate" as pkg_evaluate {
+class "evaluate.py" as evaluate_functions <<module>> {
+  + select_managers(candidates: Mapping[str, Sequence[Manager]], validation_scenarios: Sequence[Scenario],\n    policy: CustomerPolicy, config: Config) -> tuple[dict[str, Manager], list[dict]]
+  + evaluate(managers: Mapping[str, Manager], scenarios: Sequence[Scenario], policy: CustomerPolicy,\n    config: Config, *, output_dir: Path, manifest: ArtifactManifest) -> list[dict]
+  + summarize_results(day_rows: Sequence[dict], period_rows: Sequence[dict]) -> list[dict]
+  + paired_profit_intervals(day_rows: Sequence[dict], baseline: str, *, seed: int, resamples: int = 2000,\n    confidence: float = 0.95, seed_mode: str = 'mean_per_day') -> list[dict]
+  + measure_decision_latency(manager: Manager, histories: Sequence[Array],\n    *, warmup: int = 10, repeats: int = 100) -> dict[str, float]
+}
+}
+package "report" as pkg_report {
+class "report.py" as report_functions <<module>> {
+  + build_report(results_dir: Path, output_dir: Path) -> list[Path]
+  + select_representative_day(day_rows: Sequence[dict], *, reference_manager: str = 'adaptive') -> str
+}
+}
+package "cli" as pkg_cli {
+class "cli.py" as cli_functions <<module>> {
+  + main(argv: Sequence[str] | None = None) -> int
+  + smoke(config: Config, output_dir: Path) -> dict
+}
+}
+class "customers.policy" as ref_customers_policy <<reference>>
+class "customers.training" as ref_customers_training <<reference>>
+class "data.generate" as ref_data_generate <<reference>>
+class "data.scaling" as ref_data_scaling <<reference>>
+class "data.splits" as ref_data_splits <<reference>>
+class "data.storage" as ref_data_storage <<reference>>
+class "data.windows" as ref_data_windows <<reference>>
+class "managers.adaptive" as ref_managers_adaptive <<reference>>
+class "managers.base" as ref_managers_base <<reference>>
+class "managers.fixed" as ref_managers_fixed <<reference>>
+class "managers.lstm" as ref_managers_lstm <<reference>>
+class "managers.mlp" as ref_managers_mlp <<reference>>
+class "models.evaluation" as ref_models_evaluation <<reference>>
+class "models.training" as ref_models_training <<reference>>
+class "simulation.scenarios" as ref_simulation_scenarios <<reference>>
+class "simulation.simulator" as ref_simulation_simulator <<reference>>
+pkg_evaluate ..> ref_simulation_simulator : uses
+pkg_evaluate ..> ref_customers_policy : uses
+pkg_evaluate ..> ref_managers_base : uses
+pkg_evaluate ..> ref_data_storage : uses
+pkg_cli ..> ref_simulation_scenarios : uses
+pkg_cli ..> ref_customers_policy : uses
+pkg_cli ..> ref_customers_training : uses
+pkg_cli ..> ref_managers_fixed : uses
+pkg_cli ..> ref_managers_adaptive : uses
+pkg_cli ..> ref_managers_mlp : uses
+pkg_cli ..> ref_managers_lstm : uses
+pkg_cli ..> ref_data_generate : uses
+pkg_cli ..> ref_data_splits : uses
+pkg_cli ..> ref_data_windows : uses
+pkg_cli ..> ref_data_scaling : uses
+pkg_cli ..> ref_data_storage : uses
+pkg_cli ..> ref_models_training : uses
+pkg_cli ..> ref_models_evaluation : uses
+pkg_cli ..> pkg_evaluate : uses
+pkg_cli ..> pkg_report : uses
+@enduml

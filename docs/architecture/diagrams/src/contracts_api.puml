@@ -1,0 +1,153 @@
+@startuml contracts_api
+title Cafe Decision Lab - Shared types and configuration
+top to bottom direction
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam classBackgroundColor #EFF6FF
+skinparam classBorderColor #3B82F6
+skinparam ArrowColor #475569
+skinparam wrapWidth 420
+
+package "contracts" as pkg_contracts {
+class "Action" as contracts_Action <<dataclass>> {
+  action_id: int
+  prices: tuple[float, ...]
+  staff: int
+  stock: tuple[int, ...]
+}
+class "Arrival" as contracts_Arrival <<dataclass>> {
+  customer_id: int
+  minute: int
+  type_id: int
+  tie_seed: int
+}
+class "Scenario" as contracts_Scenario <<dataclass>> {
+  scenario_id: str
+  group: str
+  seed: int
+  arrivals: tuple[Arrival, ...]
+}
+class "CustomerView" as contracts_CustomerView <<dataclass>> {
+  phase: str
+  type_id: int
+  price_profile_ids: tuple[int, int]
+  prices: Array
+  queue_lengths: tuple[int, int]
+  availability: Array
+  cafe_id: int | None
+  product_id: int | None
+  queue_position: int
+  elapsed_wait: int
+  remaining_patience: int
+  final_minute: bool
+}
+class "Observation" as contracts_Observation <<dataclass>> {
+  period_index: int
+  values: Array
+}
+class "PeriodRecord" as contracts_PeriodRecord <<dataclass>> {
+  scenario_id: str
+  trajectory_id: str
+  period_index: int
+  observation: Observation
+  action: Action
+  sales: Array
+  entries: int
+  abandonment: int
+  mean_wait: float
+  wait_valid: bool
+  waste: Array
+  revenue: float
+  preparation_cost: float
+  staff_cost: float
+  profit: float
+  diagnostics: dict
+}
+class "DayResult" as contracts_DayResult <<dataclass>> {
+  scenario_id: str
+  trajectory_id: str
+  periods: list[PeriodRecord]
+  diagnostics: dict
+}
+class "DecisionInfo" as contracts_DecisionInfo <<dataclass>> {
+  action_id: int
+  predicted_outcomes: Array | None
+  predicted_profit: float | None
+  predicted_feasible: bool | None
+  fallback_used: bool
+}
+class "DatasetArrays" as contracts_DatasetArrays <<dataclass>> {
+  history: Array
+  actions: Array
+  targets: Array
+  target_mask: Array
+  keys: Array
+}
+class "ScalerStats" as contracts_ScalerStats <<dataclass>> {
+  observation_mean: Array
+  observation_std: Array
+  action_mean: Array
+  action_std: Array
+  target_std: Array
+  training_scenario_ids: tuple[str, ...]
+}
+class "ArtifactManifest" as contracts_ArtifactManifest <<dataclass>> {
+  schema_version: str
+  simulator_version: str
+  config_hash: str
+  catalogue_hash: str
+  parent_hashes: dict[str, str]
+  scenario_ids: tuple[str, ...]
+  seeds: dict[str, int]
+  feature_names: tuple[str, ...]
+  target_names: tuple[str, ...]
+  package_versions: dict[str, str]
+}
+class "contracts.py" as contracts_functions <<module>> {
+  + build_catalogue(config: Config) -> tuple[Action, ...]
+  + validate_action(action: Action, catalogue: Sequence[Action]) -> None
+  + make_history(observations: Sequence[Observation], H: int) -> Array
+}
+}
+package "config" as pkg_config {
+class "Config" as config_Config <<dataclass>> {
+  simulation: dict
+  products: tuple[dict, ...]
+  customer_types: tuple[dict, ...]
+  catalogue: dict
+  customer_training: dict
+  dataset: dict
+  model: dict
+  training: dict
+  evaluation: dict
+  seeds: dict[str, int]
+}
+class "config.py" as config_functions <<module>> {
+  + load_config(path: Path) -> Config
+  + validate_config(config: Config) -> None
+  + config_hash(config: Config) -> str
+}
+}
+contracts_Action -[hidden]right-> contracts_Arrival
+contracts_Action -[hidden]down-> contracts_Observation
+contracts_Arrival -[hidden]right-> contracts_Scenario
+contracts_Arrival -[hidden]down-> contracts_PeriodRecord
+contracts_Scenario -[hidden]right-> contracts_CustomerView
+contracts_Scenario -[hidden]down-> contracts_DayResult
+contracts_CustomerView -[hidden]down-> contracts_DecisionInfo
+contracts_Observation -[hidden]right-> contracts_PeriodRecord
+contracts_Observation -[hidden]down-> contracts_DatasetArrays
+contracts_PeriodRecord -[hidden]right-> contracts_DayResult
+contracts_PeriodRecord -[hidden]down-> contracts_ScalerStats
+contracts_DayResult -[hidden]right-> contracts_DecisionInfo
+contracts_DayResult -[hidden]down-> contracts_ArtifactManifest
+contracts_DecisionInfo -[hidden]down-> contracts_functions
+contracts_DatasetArrays -[hidden]right-> contracts_ScalerStats
+contracts_DatasetArrays -[hidden]down-> config_Config
+contracts_ScalerStats -[hidden]right-> contracts_ArtifactManifest
+contracts_ScalerStats -[hidden]down-> config_functions
+contracts_ArtifactManifest -[hidden]right-> contracts_functions
+config_Config -[hidden]right-> config_functions
+@enduml

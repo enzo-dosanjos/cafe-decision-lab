@@ -1,5 +1,16 @@
 {
   "simulation": {"day_minutes": 480, "period_minutes": 30, "service_effort": 2, "staff_period_cost": 40, "competitor_action_id": 13},
+  "demand": {
+    "base_rate": 1.0,
+    "peaks": [
+      {"center_minute": 90, "width_minutes": 45, "amplitude": 1.0},
+      {"center_minute": 300, "width_minutes": 60, "amplitude": 0.8}
+    ],
+    "daily_multiplier": [0.8, 1.2],
+    "latent_persistence": 0.8,
+    "latent_noise_std": 0.2,
+    "latent_multiplier": [0.5, 2.0]
+  },
   "products": [
     {"name": "espresso", "base_price": 22, "unit_cost": 6},
     {"name": "latte", "base_price": 30, "unit_cost": 10},

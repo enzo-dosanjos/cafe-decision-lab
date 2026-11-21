@@ -12,6 +12,7 @@ class Config:
     """Resolved experiment settings, with product and type order preserved."""
 
     simulation: dict
+    demand: dict
     products: tuple[dict, ...]
     customer_types: tuple[dict, ...]
     catalogue: dict
@@ -65,6 +66,36 @@ def _number(value: object, field: str, *, integer: bool = False, positive: bool 
 
 def validate_config(config: Config) -> None:
     """Reject inconsistent time units, dimensions, probabilities and experiment settings."""
+    demand = config.demand
+    _number(demand["base_rate"], "demand.base_rate")
+    _number(demand["latent_noise_std"], "demand.latent_noise_std")
+    persistence = demand["latent_persistence"]
+
+    if type(persistence) not in (int, float) or not -1 < persistence < 1:
+        raise ValueError("demand.latent_persistence must lie strictly between -1 and 1")
+
+    for field in ("daily_multiplier", "latent_multiplier"):
+        bounds = demand[field]
+
+        if not isinstance(bounds, list) or len(bounds) != 2:
+            raise ValueError(f"demand.{field} requires two bounds")
+
+        for bound in bounds:
+            _number(bound, f"demand.{field}", positive=field == "latent_multiplier")
+
+        if bounds[0] > bounds[1]:
+            raise ValueError(f"demand.{field} requires ordered bounds")
+
+    if not isinstance(demand["peaks"], list):
+        raise ValueError("demand.peaks must be a list")
+
+    for peak in demand["peaks"]:
+        for field in ("center_minute", "width_minutes", "amplitude"):
+            if not isinstance(peak, dict) or field not in peak:
+                raise ValueError(f"demand.peaks requires {field}")
+
+            _number(peak[field], f"demand.peaks.{field}", positive=field == "width_minutes")
+
     sim = config.simulation
 
     for field in ("day_minutes", "period_minutes", "service_effort"):

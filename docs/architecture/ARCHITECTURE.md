@@ -65,6 +65,7 @@ cafe-decision-lab/
 │       ├── evaluate.py             # All-manager business selection/comparison
 │       └── report.py               # Saved results to static figures and summaries
 ├── tests/
+│   ├── test_foundation.py          # Shared contracts, configuration and smoke fixture
 │   ├── test_simulator.py           # Accounting, capacity, boundaries, conservation
 │   ├── test_customers.py           # Q transitions, masks, frozen behavior
 │   ├── test_data.py                # Splits, histories, padding, train-only scalers
@@ -104,6 +105,11 @@ cafe-decision-lab/
 ```
 
 ## Simulation and state ownership
+
+`generate_scenario` samples the complete arrival schedule before a rollout. The
+`demand` section of the configuration sets the base arrival rate, daily peaks,
+daily multiplier and persistent demand variation across periods. Replaying the
+saved schedule keeps arrival times and customer types fixed across managers.
 
 `run_day` owns two café states, one FIFO queue per café, inventory, fractional
 service credits, customer instances, period counters and the rolling history.

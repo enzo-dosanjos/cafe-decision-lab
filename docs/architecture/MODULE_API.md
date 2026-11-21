@@ -40,7 +40,7 @@ Scenario and observation values are read-only after construction. The [shared ty
 
 ### `config`
 
-Loads and validates settings. Config is the shared configuration value, not a service object.
+The `demand` section controls scenario generation. Peak centers and widths use minutes. The daily multiplier is sampled once per day, and the latent multiplier varies by period.
 
 | Signature | Role |
 | --- | --- |

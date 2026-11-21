@@ -1,0 +1,4 @@
+{
+  "simulation": {"day_minutes": 60},
+  "dataset": {"scenario_days": 20, "trajectories_per_day": 1}
+}

@@ -1,0 +1,20 @@
+{
+  "simulation": {"day_minutes": 480, "period_minutes": 30, "service_effort": 2, "staff_period_cost": 40, "competitor_action_id": 13},
+  "products": [
+    {"name": "espresso", "base_price": 22, "unit_cost": 6},
+    {"name": "latte", "base_price": 30, "unit_cost": 10},
+    {"name": "pastry", "base_price": 18, "unit_cost": 7}
+  ],
+  "customer_types": [
+    {"name": "budget", "probability": 0.45, "values": [25,31,20], "budget": 35, "waiting_cost": 0.4, "max_wait": 15},
+    {"name": "time_sensitive", "probability": 0.30, "values": [30,40,26], "budget": 50, "waiting_cost": 1.5, "max_wait": 5},
+    {"name": "pastry_oriented", "probability": 0.25, "values": [26,35,30], "budget": 45, "waiting_cost": 0.7, "max_wait": 10}
+  ],
+  "catalogue": {"price_multipliers": [0.9,1.0,1.1], "staff_counts": [1,2,3], "stock_profiles": [[6,6,6],[10,10,10],[16,16,16]]},
+  "customer_training": {"days": 1000, "validation_interval": 100, "validation_days": 30, "alpha": 0.1, "gamma": 1.0, "epsilon_start": 1.0, "epsilon_end": 0.05},
+  "dataset": {"scenario_days": 1000, "trajectories_per_day": 2, "fractions": [0.7,0.15,0.15]},
+  "model": {"history_length": 4, "feature_count": 30},
+  "training": {"learning_rate": 0.001, "batch_size": 128, "max_epochs": 100, "patience": 10, "gradient_clip": 1.0},
+  "evaluation": {"abandonment_limit": 5},
+  "seeds": {"scenario": 0, "management": 1, "customer": 2, "split": 3, "training": 0}
+}

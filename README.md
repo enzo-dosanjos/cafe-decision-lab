@@ -3,9 +3,21 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
-**Status:** architecture and API design are documented. The simulator, training
-pipeline and evaluation code have not been implemented. Commands in the architecture
-document are planned interfaces, not runnable instructions yet.
+**Status:** shared configuration and record types, the fixed manager, and the contract smoke command are implemented. Full market rollouts require the simulation and customer-policy modules.
+
+From the repository root, install into your Python environment and run:
+
+```sh
+python -m pip install -e .
+python -m unittest discover -s tests
+python -m cafe.cli smoke
+```
+
+The smoke command writes the action catalogue, opening history and selected action to
+`runs/smoke/contracts.json`. With the simulator and customer policy installed, run
+`python -m cafe.cli smoke --rollout` to verify a zero-arrival day against exact
+preparation and staffing costs and save its period summaries to `runs/smoke/day.json`.
+Use `--output-dir` to keep separate runs.
 
 ## Documentation
 
@@ -22,7 +34,10 @@ simulation and customers, managers and models, data, neural training, and evalua
 ```text
 .
 ├── README.md
-├── .gitignore
+├── pyproject.toml
+├── config/                    # Full defaults and smoke overrides
+├── src/cafe/                  # Shared contracts, managers and CLI
+├── tests/                     # Foundation checks
 └── docs/
     └── architecture/
         ├── ARCHITECTURE.md
@@ -31,10 +46,6 @@ simulation and customers, managers and models, data, neural training, and evalua
             ├── src/           # PlantUML sources
             └── rendered/      # SVG previews
 ```
-
-Implementation will introduce sibling `simulation`, `customers`, `managers`,
-`models` and `data` packages under `src/cafe/`. Customer training belongs beside
-customer policies; neural training belongs beside predictor definitions.
 
 The first milestone is the simulator, fixed manager, deterministic checks and an
 executable smoke run. Later stages train and freeze customer policies, generate

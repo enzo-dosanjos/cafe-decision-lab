@@ -40,7 +40,7 @@ Scenario and observation values are read-only after construction. The [shared ty
 
 ### `config`
 
-Loads and validates settings. Config is the shared configuration value, not a service object.
+The `demand` section controls scenario generation. Peak centers and widths use minutes. The daily multiplier is sampled once per day, and the latent multiplier varies by period.
 
 | Signature | Role |
 | --- | --- |
@@ -71,7 +71,7 @@ Owns market state and the single event loop.
 
 ### `customers.policy`
 
-Contains customer behavior and Q updates, without importing simulation or training. StateKey is a phase-tagged tuple of discrete bins; customer action IDs are distinct from manager Action IDs.
+The `tables` property exposes live Q values during training and returns a detached copy for a frozen policy. StateKey is a phase-tagged tuple of discrete bins; customer action IDs are distinct from manager Action IDs.
 
 **CustomerPolicy** — class.
 
@@ -91,7 +91,7 @@ frozen: bool
 | Signature | Role |
 | --- | --- |
 | `encode_state(view: CustomerView) -> StateKey` | Apply the specification arrival/wait binning; no whole-market state or customer-ID key. |
-| `valid_actions(view: CustomerView, config: Config) -> tuple[int, ...]` | Mask unavailable/unaffordable choices; force leave for stock, budget, patience or closing conditions. |
+| `valid_actions(view: CustomerView, config: Config) -> tuple[int, ...]` | Mask unavailable/unaffordable choices; force leave for stock, budget or exhausted patience. Eligible waiters may stay for final-minute service. The simulator closes remaining queues afterward. |
 | `save_policy(policy: CustomerPolicy, path: Path, manifest: ArtifactManifest) -> None` | Serialize JSON Q-table entries with explicit tuple keys and lineage. |
 | `load_policy(path: Path, expected: ArtifactManifest) -> CustomerPolicy` | Check lineage and schema; restore frozen tables. |
 

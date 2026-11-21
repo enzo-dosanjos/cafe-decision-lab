@@ -24,6 +24,12 @@ class "CafeState" as simulation_simulator_CafeState <<dataclass>> {
   inventory: Array
   queue: deque[CustomerInstance]
   service_credit: float
+  sales: Array
+  entries: int
+  abandonment: int
+  served_wait: int
+  departed_wait: int
+  departure_reasons: Counter
 }
 class "CustomerInstance" as simulation_simulator_CustomerInstance <<dataclass>> {
   arrival: Arrival
@@ -31,6 +37,8 @@ class "CustomerInstance" as simulation_simulator_CustomerInstance <<dataclass>> 
   product_id: int
   elapsed_wait: int
   pending: PendingTransition | None
+  pending_reward: float
+  episode_return: float
 }
 class "simulator.py" as simulation_simulator_functions <<module>> {
   + run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str,\n    learn: bool = False, epsilon: float = 0.0, exploration_seed: int | None = None) -> DayResult

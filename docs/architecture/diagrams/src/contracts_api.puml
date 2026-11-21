@@ -114,6 +114,7 @@ class "contracts.py" as contracts_functions <<module>> {
 package "config" as pkg_config {
 class "Config" as config_Config <<dataclass>> {
   simulation: dict
+  demand: dict
   products: tuple[dict, ...]
   customer_types: tuple[dict, ...]
   catalogue: dict

@@ -3,20 +3,23 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
-**Status:** shared configuration and record types, the fixed manager, and the contract smoke command are implemented. Full market rollouts require the simulation and customer-policy modules.
+**Status:** the market simulator runs complete days with a fixed manager and a tabular
+customer policy. Saved arrival schedules support deterministic replay. The policy
+supports Q-learning updates, freezing and persistence. The next milestone is the
+multi-day customer trainer and validation-based checkpoint selection.
 
 From the repository root, install into your Python environment and run:
 
 ```sh
 python -m pip install -e .
 python -m unittest discover -s tests
-python -m cafe.cli smoke
+python -m cafe.cli smoke --rollout
 ```
 
 The smoke command writes the action catalogue, opening history and selected action to
-`runs/smoke/contracts.json`. With the simulator and customer policy installed, run
-`python -m cafe.cli smoke --rollout` to verify a zero-arrival day against exact
-preparation and staffing costs and save its period summaries to `runs/smoke/day.json`.
+`runs/smoke/contracts.json`. With `--rollout`, it also verifies a zero-arrival day and saves
+period summaries to `runs/smoke/day.json`. With the smoke defaults, each of the
+two periods costs HKD 230 in prepared stock and HKD 80 in staffing.
 Use `--output-dir` to keep separate runs.
 
 ## Documentation
@@ -36,8 +39,8 @@ simulation and customers, managers and models, data, neural training, and evalua
 ├── README.md
 ├── pyproject.toml
 ├── config/                    # Full defaults and smoke overrides
-├── src/cafe/                  # Shared contracts, managers and CLI
-├── tests/                     # Foundation checks
+├── src/cafe/                  # Simulation, customer policies, managers and CLI
+├── tests/                     # Contract, customer-policy and simulator checks
 └── docs/
     └── architecture/
         ├── ARCHITECTURE.md
@@ -46,7 +49,3 @@ simulation and customers, managers and models, data, neural training, and evalua
             ├── src/           # PlantUML sources
             └── rendered/      # SVG previews
 ```
-
-The first milestone is the simulator, fixed manager, deterministic checks and an
-executable smoke run. Later stages train and freeze customer policies, generate
-datasets, train predictors and run paired business evaluation.

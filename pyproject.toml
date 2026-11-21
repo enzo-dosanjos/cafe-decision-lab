@@ -10,3 +10,6 @@ dependencies = ["numpy>=1.24"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff.lint]
+select = ["F", "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107"]

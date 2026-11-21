@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests and simulation smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+      - run: python -m cafe.cli smoke --rollout
+
+  documentation:
+    name: Architecture links and diagrams
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check local Markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments README.md 'docs/**/*.md'
+          fail: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install diagram renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y 'graphviz=2.42.2-*'
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/plantuml.jar" https://repo.maven.apache.org/maven2/net/sourceforge/plantuml/plantuml-mit/1.2026.2/plantuml-mit-1.2026.2.jar
+          echo "3845bf1037df6029ae1b8cb1be69f645711797035648e114b765289c3406d45d  $RUNNER_TEMP/plantuml.jar" | sha256sum -c -
+      - name: Render diagrams and verify previews
+        run: |
+          java -Djava.awt.headless=true -jar "$RUNNER_TEMP/plantuml.jar" -failfast2 -tsvg -o "$RUNNER_TEMP/diagrams" docs/architecture/diagrams/src/*.puml
+          python3 scripts/check_diagrams.py "$RUNNER_TEMP/diagrams"
+
+  package:
+    name: Build and install on Python 3.10
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: python -m pip install build==1.2.2.post1
+      - run: python -m build
+      - name: Run installed wheel outside checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv package-env
+          package-env/bin/python -m pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          package-env/bin/python -I -m cafe.cli smoke --rollout --config "$GITHUB_WORKSPACE/config/smoke.json" --output-dir package-smoke
+
+  lint:
+    name: Lint and docstrings
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ruff==0.11.13
+      - run: ruff check .

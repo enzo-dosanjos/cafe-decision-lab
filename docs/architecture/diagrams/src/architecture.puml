@@ -43,6 +43,7 @@ folder "results/<evaluation-id>/" as Results {
 }
 
 CLI --> CustomerTrain
+CLI --> Simulation : generate customer training schedules
 CLI --> Generate
 CLI --> Train
 CLI --> Evaluate

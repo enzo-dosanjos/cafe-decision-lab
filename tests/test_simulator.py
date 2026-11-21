@@ -151,6 +151,14 @@ class SimulatorTests(unittest.TestCase):
         self.assertEqual(second.observation.values[2], 2)
         self.assertEqual(second.observation.values[15], 19.8)
 
+    def test_last_slot_serves_existing_waiter_first(self) -> None:
+        """The minute-six arrival gets the minute-seven slot ahead of the new arrival."""
+        last = self.run_fixture((6, 7)).periods[-1]
+
+        self.assertEqual(last.sales.tolist(), [1, 0, 0])
+        self.assertEqual(last.mean_wait, 1)
+        self.assertEqual(last.diagnostics["departure_reasons"], {"closing": 1})
+
     def test_closing_departures_and_terminal_wait(self) -> None:
         """Final-minute arrivals left after service depart before accounting is saved."""
         policy = DeterministicPolicy()

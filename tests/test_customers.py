@@ -65,12 +65,11 @@ class CustomerTests(unittest.TestCase):
         self.assertEqual(valid_actions(self.view, config), (2, 5, 6))
 
     def test_waiting_mask(self) -> None:
-        """Stock, budget, patience and final-minute conditions force leave."""
+        """Stock, budget and patience can force departure even before closing."""
         self.assertEqual(valid_actions(self.waiting, self.config), (0, 1))
         cases = (
             replace(self.waiting, remaining_patience=0),
             replace(self.waiting, elapsed_wait=15),
-            replace(self.waiting, final_minute=True),
             replace(self.waiting, availability=np.zeros((2, 3))),
             replace(self.waiting, prices=np.full((2, 3), 36.)),
         )

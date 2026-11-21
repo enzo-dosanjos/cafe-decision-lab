@@ -114,8 +114,7 @@ def valid_actions(view: CustomerView, config: Config) -> tuple[int, ...]:
         return (*map(int, np.flatnonzero(available)), 6)
 
     forced = (not available[view.cafe_id, view.product_id]
-              or view.remaining_patience == 0 or view.elapsed_wait >= customer["max_wait"]
-              or view.final_minute)
+              or view.remaining_patience == 0 or view.elapsed_wait >= customer["max_wait"])
 
     return (1,) if forced else (0, 1)
 

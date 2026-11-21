@@ -67,6 +67,7 @@ cafe-decision-lab/
 ├── tests/
 │   ├── test_foundation.py          # Shared contracts, configuration and smoke fixture
 │   ├── test_simulator.py           # Accounting, capacity, boundaries, conservation
+│   ├── test_customer_training.py   # Validation metrics, checkpoint selection and split checks
 │   ├── test_customers.py           # Q transitions, masks, frozen behavior
 │   ├── test_data.py                # Splits, histories, padding, train-only scalers
 │   ├── test_models.py              # Shared I/O, decoding, gradients, recurrent reset
@@ -74,6 +75,7 @@ cafe-decision-lab/
 ├── artifacts/                     # Generated, excluded from normal source commits
 │   └── <experiment-id>/
 │       ├── manifest.json           # Resolved config, versions, hashes, stage status
+│       ├── config.json             # Resolved experiment settings
 │       ├── catalogue.json          # Stable IDs and numeric action values
 │       ├── scenarios/
 │       │   ├── manifest.json       # Customer train/validation and management groups

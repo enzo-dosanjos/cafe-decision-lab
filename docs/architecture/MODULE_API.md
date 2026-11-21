@@ -10,7 +10,7 @@
 - Constructors validate their inputs. Functions reject incompatible artifacts or malformed arrays with clear exceptions. No function below reads ambient global configuration.
 - All input paths identify local artifacts. A stage writes only to its explicit output directory. Loaders validate parent lineage before computation; CLI constructs the expected manifest from selected upstream artifacts.
 - `CustomerView` contains what one customer can observe and its own type. It excludes future arrivals, latent demand and other customers’ types. A manager never receives this view, Scenario or CafeState.
-- `DayResult.diagnostics` includes market arrivals/outside counts, competitor accounting, customer episode returns by type, total served waits, departure reasons and conservation counts. Period diagnostics include queues, served-wait totals and selected-manager DecisionInfo. Daily summaries derive from counts, not unweighted averages.
+- `DayResult.diagnostics` includes market arrivals/outside counts, competitor accounting, customer episode returns by type, per-type terminal outcome counts and total served waits, departure reasons and conservation counts. Period diagnostics include queues, served-wait totals and selected-manager DecisionInfo. Daily summaries derive from counts, not unweighted averages.
 - `Config` sections contain the numerical defaults and learning settings specified in the PDF; validation checks nested keys/types, not just the outer dictionaries. This avoids inventing a large class hierarchy for configuration.
 - Dataclass fields in the diagrams are constructor parameters. Private CafeState/CustomerInstance objects never leave the simulator. Customer policies own Q tables; simulation owns each customer’s pending transition, terminal state and waiting-cost bookkeeping.
 
@@ -97,7 +97,20 @@ frozen: bool
 
 ### `customers.training`
 
-Runs customer learning before management dataset generation. Receives exploration managers from the caller so it does not import data generation.
+Training cycles through a seeded permutation of fixed catalogue managers, one per day.
+Validation always uses the same schedules and manager assignments. Each checkpoint logs
+one pooled row and one row per type. Mean return, purchase fraction and outside
+fraction use completed episodes as the denominator. Mean served wait uses purchases.
+A missing denominator produces an empty CSV value.
+
+The acceptance checks use strict comparisons on visited Q-table rows. With empty
+queues and full stock, at least one affordable positive-surplus product must outrank
+outside, and outside must outrank at least one affordable negative-surplus product.
+For queues with at least four customers ahead, compare the wait-minus-leave values
+of the highest and lowest waiting-cost types. Match café, product, price, position
+and elapsed-wait bins, averaging within each matched context. The higher-cost type
+must have the lower mean advantage. Missing matched evidence fails the check.
+These are controlled preference probes. The validation rollouts measure realized outcomes.
 
 | Signature | Role |
 | --- | --- |

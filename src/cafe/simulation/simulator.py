@@ -148,6 +148,7 @@ def run_day(scenario: Scenario, customer_policy: "CustomerPolicy", manager: Mana
     observations = []
     competitor_periods = []
     episodes = [[] for _ in config.customer_types]
+    type_totals = [Counter() for _ in config.customer_types]
     outcomes = Counter()
     arrival_index = 0
     market_arrivals = 0
@@ -203,7 +204,12 @@ def run_day(scenario: Scenario, customer_policy: "CustomerPolicy", manager: Mana
         """Complete an episode once and retain its type-specific return."""
         update(customer, reward, None)
         outcomes[outcome] += 1
-        episodes[customer.arrival.type_id].append(customer.episode_return)
+        type_id = customer.arrival.type_id
+        episodes[type_id].append(customer.episode_return)
+        type_totals[type_id][outcome] += 1
+
+        if outcome.startswith("purchased_"):
+            type_totals[type_id]["served_wait_total"] += customer.elapsed_wait
 
     def departure(customer: CustomerInstance, reason: str) -> None:
         """Count a queue departure in the period in which it happens."""
@@ -346,6 +352,7 @@ def run_day(scenario: Scenario, customer_policy: "CustomerPolicy", manager: Mana
 
     diagnostics = {"market_arrivals": len(scenario.arrivals), "outside_count": outcomes["outside"],
                    "competitor": competitor_periods, "episode_returns_by_type": episodes,
+                   "outcomes_by_type": [dict(counts) for counts in type_totals],
                    "served_wait_total": sum(row.diagnostics["served_wait_total"] for row in periods),
                    "departure_reasons": dict(reasons), "conservation": dict(outcomes),
                    "entries": entries, "abandonment": abandonment,

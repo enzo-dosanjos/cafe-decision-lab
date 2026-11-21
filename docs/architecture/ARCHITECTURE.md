@@ -207,7 +207,7 @@ CLI commands after package installation with `python -m pip install -e .`:
 ```sh
 python -m cafe.cli smoke
 python -m cafe.cli train-customers --config config/default.json
-python -m cafe.cli generate-data --config config/default.json
+python -m cafe.cli generate-data --config config/default.json --customer-dir artifacts/customers-4000 --output-dir artifacts/management-4000
 python -m cafe.cli train --model mlp --seed 0
 python -m cafe.cli train --model lstm --seed 0
 python -m cafe.cli evaluate
@@ -217,7 +217,8 @@ python -m unittest discover -s tests
 
 Expose an explicit experiment/artifact-directory argument on stage commands so
 multiple runs cannot silently overwrite or mix one another. Default commands target
-one documented default experiment. Repeat model training for seeds 1 and 2 for final results.
+one documented default experiment where applicable. Dataset generation requires explicit
+customer and output directories. Repeat model training for seeds 1 and 2 for final results.
 
 ## Decisions still to validate
 

@@ -28,6 +28,8 @@ class "splits.py" as data_splits_functions <<module>> {
 }
 package "data.windows" as pkg_data_windows {
 class "windows.py" as data_windows_functions <<module>> {
+  + numeric_action(row: PeriodRecord) -> tuple[float, ...]
+  + targets(row: PeriodRecord) -> tuple[float, ...]
   + make_windows(records: Sequence[PeriodRecord], splits: Mapping[str,\n    str], *, split: str, H: int) -> DatasetArrays
 }
 }
@@ -56,6 +58,8 @@ pkg_data_generate ..> ref_simulation_simulator : uses
 pkg_data_generate ..> ref_simulation_scenarios : uses
 pkg_data_generate ..> ref_managers_base : uses
 pkg_data_generate ..> ref_customers_policy : uses
-pkg_data_generate ..> pkg_data_storage : uses
+pkg_data_generate ..> pkg_data_storage : write periods
+pkg_data_scaling ..> pkg_data_windows : numeric field order
+pkg_data_storage ..> pkg_data_splits : split labels
 data_generate_ExplorationManager --|> ref_managers_base
 @enduml

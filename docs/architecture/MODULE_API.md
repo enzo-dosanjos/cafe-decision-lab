@@ -259,6 +259,8 @@ Build raw-unit arrays only. Scaling is owned by the predictor forward path, prev
 
 | Signature | Role |
 | --- | --- |
+| `numeric_action(row: PeriodRecord) -> tuple[float, ...]` | Read the applied prices, staffing and stock in model input order. |
+| `targets(row: PeriodRecord) -> tuple[float, ...]` | Read realized sales, abandonment and served mean wait in output order. |
 | `make_windows(records: Sequence[PeriodRecord], splits: Mapping[str, str], *, split: str, H: int) -> DatasetArrays` | Group by scenario and trajectory, order periods, construct causal histories with make_history, and attach actual actions, targets, masks and explicit keys. Reject missing/duplicate periods. |
 
 ### `data.scaling`
@@ -270,6 +272,10 @@ Fits plain numeric statistics without PyTorch or simulation imports. Runtime tra
 | `fit_scalers(records: Sequence[PeriodRecord], splits: Mapping[str, str]) -> ScalerStats` | Use unique real training observations/actions, not repeated overlapping windows. Compute valid-only target scales, floor standard deviations at 1.0, and fail when training has no valid waits. |
 | `save_scalers(scalers: ScalerStats, path: Path) -> None` | Write JSON fitted values and training IDs. |
 | `load_scalers(path: Path, expected_training_ids: Sequence[str]) -> ScalerStats` | Validate shape, finite values, standard-deviation floor and training membership. |
+
+NPZ row keys use the named fields `scenario_id`, `trajectory_id` and integer `period_index`.
+Scaler JSON stores feature, action and target order. The two observation validity flags
+use identity transforms.
 
 ### `data.storage`
 

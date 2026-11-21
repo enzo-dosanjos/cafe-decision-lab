@@ -43,7 +43,7 @@ folder "results/<evaluation-id>/" as Results {
 }
 
 CLI --> CustomerTrain
-CLI --> Simulation : generate customer training schedules
+CLI --> Simulation : generate scenario schedules
 CLI --> Generate
 CLI --> Train
 CLI --> Evaluate
@@ -55,8 +55,9 @@ Simulation --> Customers : customer-visible state / decisions
 CustomerTrain --> Customers : update and freeze Q-tables
 Managers --> Predictor : neural selector only
 Predictors --|> Predictor : inherit
-Generate --> Simulation : generate schedules / run_day
-Generate --> Prepare : split and build arrays
+Generate --> Simulation : save schedules / run_day
+Generate --> Prepare : write period records
+CLI --> Prepare : split, fit scalers and build windows
 Train --> Predictors : fit
 Train --> Prepare : load prepared arrays
 Forecast --> Predictor : predict

@@ -3,8 +3,8 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
-**Status:** market simulation and tabular customer training run end to end. Customer
-training produces a frozen policy for management dataset generation, the next milestone.
+**Status:** market simulation, customer training and management dataset generation run end to end.
+The next milestone is the adaptive baseline and MLP outcome predictor.
 
 From the repository root, install into your Python environment and run:
 
@@ -40,6 +40,27 @@ checkpoint. `customers/policy.json` contains the best eligible frozen tables.
 If every checkpoint fails, the CSV explains which checks failed and the command
 exits with an error. For a smaller pilot use `config/smoke.json` and a separate
 output directory.
+
+## Management dataset
+
+Pass the customer experiment containing the selected frozen checkpoint and its manifest.
+For example, if the 4,000-day experiment is stored at `artifacts/customers-4000`, run:
+
+```sh
+python -m cafe.cli generate-data --config config/default.json --customer-dir artifacts/customers-4000 --output-dir artifacts/management-4000
+```
+
+Use a new output directory for each experiment. The full configuration generates
+1,000 independent days with two trajectories per day: uniform actions each period
+and actions held for 2–4 periods. Both trajectories share the same arrivals and
+stay in the same split. The 32,000 period rows are split across 700 training,
+150 validation and 150 test scenarios. For a 20-day integration run, use
+`--config config/smoke.json` and a separate output directory.
+
+The experiment stores replayable schedules under `scenarios/`. Its `dataset/`
+directory contains factual period records, scenario splits, raw four-period windows
+for each split, and scalers fitted on training periods. The manifest identifies
+the frozen customer tables and checkpoint file by hash.
 
 ## Documentation
 

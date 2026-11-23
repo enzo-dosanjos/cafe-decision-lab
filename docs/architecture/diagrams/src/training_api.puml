@@ -20,7 +20,7 @@ class "training.py" as models_training_functions <<module>> {
 }
 package "models.evaluation" as pkg_models_evaluation {
 class "evaluation.py" as models_evaluation_functions <<module>> {
-  + evaluate_forecasts(model: OutcomePredictor, arrays: DatasetArrays,\n    *, batch_size: int = 128) -> tuple[list[dict], dict[str, float]]
+  + evaluate_forecasts(model: OutcomePredictor, arrays: DatasetArrays,\n    *, batch_size: int = 128) -> tuple[list[dict], dict[str, float | None]]
 }
 }
 class "data.scaling" as ref_data_scaling <<reference>>

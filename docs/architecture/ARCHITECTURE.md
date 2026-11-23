@@ -208,10 +208,13 @@ CLI commands after package installation with `python -m pip install -e .`:
 python -m cafe.cli smoke
 python -m cafe.cli train-customers --config config/default.json
 python -m cafe.cli generate-data --config config/default.json --customer-dir artifacts/customers-4000 --output-dir artifacts/management-4000
-python -m cafe.cli train --model mlp --seed 0
-python -m cafe.cli train --model lstm --seed 0
-python -m cafe.cli evaluate
-python -m cafe.cli report
+python -m cafe.cli train --model mlp --seed 0 --experiment-dir artifacts/management-4000
+python -m cafe.cli validate-managers --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-mlp-0
+python -m cafe.cli train --model lstm --seed 0 --experiment-dir artifacts/management-4000
+# Train both architectures with seeds 0, 1, 2 before final evaluation.
+python -m cafe.cli validate-managers --models mlp lstm --seeds 0 1 2 --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-three-seed
+python -m cafe.cli evaluate --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --selection runs/validation-three-seed/selection.json --output-dir results/three-seed
+python -m cafe.cli report --results-dir results/three-seed --output-dir results/three-seed/report
 python -m unittest discover -s tests
 ```
 

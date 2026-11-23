@@ -3,8 +3,11 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
-**Status:** market simulation, customer training and management dataset generation run end to end.
-The next milestone is the adaptive baseline and MLP outcome predictor.
+**Status:** fixed, adaptive, MLP and LSTM managers support validation selection and
+matched held-out evaluation with three neural training seeds. Forecast diagnostics,
+paired day-bootstrap intervals, seed variability and static report figures are available.
+The full comparison has been exercised on 150 held-out scenario days, with recurrent
+reset, matched-day and accounting checks.
 
 From the repository root, install into your Python environment and run:
 
@@ -61,6 +64,64 @@ The experiment stores replayable schedules under `scenarios/`. Its `dataset/`
 directory contains factual period records, scenario splits, raw four-period windows
 for each split, and scalers fitted on training periods. The manifest identifies
 the frozen customer tables and checkpoint file by hash.
+
+## MLP training and manager validation
+
+Install the neural dependencies, train the seed-0 MLP, then compare managers using
+the same customer experiment used to generate the dataset:
+
+```sh
+python -m pip install -e ".[neural]"
+python -m cafe.cli train --model mlp --seed 0 --experiment-dir artifacts/management-4000
+python -m cafe.cli validate-managers --seed 0 --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-mlp-0
+```
+
+## LSTM and three-seed comparison
+
+The LSTM uses the same four observations, numeric actions, scaling, decoded outputs,
+loss and selector as the MLP. Its hidden/cell state starts at zero for every window;
+only recurrent gradients are clipped, using the configured norm limit. Existing
+checkpoints are never overwritten. Keep the seed-0 MLP and train the remaining seeds:
+
+```sh
+python -m cafe.cli train --model mlp --seed 1 --experiment-dir artifacts/management-4000
+python -m cafe.cli train --model mlp --seed 2 --experiment-dir artifacts/management-4000
+python -m cafe.cli train --model lstm --seed 0 --experiment-dir artifacts/management-4000
+python -m cafe.cli train --model lstm --seed 1 --experiment-dir artifacts/management-4000
+python -m cafe.cli train --model lstm --seed 2 --experiment-dir artifacts/management-4000
+python -m cafe.cli validate-managers --models mlp lstm --seeds 0 1 2 --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-three-seed
+python -m cafe.cli evaluate --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --selection runs/validation-three-seed/selection.json --output-dir results/three-seed
+python -m pip install -e ".[report]"
+python -m cafe.cli report --results-dir results/three-seed --output-dir results/three-seed/report
+```
+
+To reuse the original fixed/adaptive validation trials, pass
+`--baseline-selection runs/manager-validation-mlp-0/selection.json` to validation.
+The command checks dataset lineage, candidate settings and validation day IDs before
+reuse. It preserves the source file and ranks the six neural candidates on validation
+business results. No architecture or history alternatives are tried by these commands.
+Evaluation verifies checkpoint hashes against validation and evaluates **all three
+seeds**, including the validation-selected seed, without selecting on test outcomes.
+
+The output contains period/day accounting, per-seed business summaries, factual
+validation/test forecasts, MAE/RMSE per target, full-selection CPU latency and paired
+profit comparisons against fixed and adaptive. The report adds paired LSTM-minus-MLP
+forecast-error intervals, paired daily business-metric differences and seed SD/range tables. Confidence intervals resample 150
+independent scenario days, retaining all seeds and trajectories within each day.
+Profit intervals include both averages across seeds per day and separate-seed results;
+forecast intervals average seed-specific error metrics rather than ensemble predictions.
+They describe day variability conditional on the trained seeds. Wait is weighted by
+purchases; undefined abandonment fractions are excluded and their valid-day count is
+explicit. Generated checkpoints, tables and figures stay in ignored local directories.
+
+Training reads the saved training and validation splits and training-only scalers.
+It selects the epoch with the lowest validation loss and saves its weights and
+per-epoch metrics under `models/mlp/` in the dataset experiment. Validation runs
+all fixed actions, eight adaptive rules and the trained MLP on complete matched
+days. `selection.json` records each candidate's settings, daily actions, realized
+profit and abandonment, plus the selected candidate for each family. Set
+`--workers` to parallelize independent validation days on CPU. Use a fresh
+output directory for each comparison.
 
 ## Documentation
 

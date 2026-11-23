@@ -307,15 +307,22 @@ Forecast accuracy on factual held-out trajectories; no manager tuning or market 
 
 | Signature | Role |
 | --- | --- |
-| `evaluate_forecasts(model: OutcomePredictor, arrays: DatasetArrays, *, batch_size: int = 128) -> tuple[list[dict], dict[str, float]]` | Predict raw outcomes with keyed rows, compute per-target MAE/RMSE and valid-only wait errors; return data for plots. |
+| `evaluate_forecasts(model: OutcomePredictor, arrays: DatasetArrays, *, batch_size: int = 128) -> tuple[list[dict], dict[str, float | None]]` | Predict raw outcomes with keyed rows, compute per-target MAE/RMSE and valid-only wait errors; empty valid-target sets return None. Return data for plots. |
 
 ### `evaluate`
 
 Business evaluation applies to all managers. Candidate managers and loaded predictors are passed by the CLI; this module does not construct network architectures. Forecast evaluation is dispatched separately by the CLI.
+Manager labels are `fixed`, `adaptive`, `mlp-seed-<n>` and `lstm-seed-<n>`.
+Each seed has distinct daily/period rows; summaries never pool seeds as independent
+days. CSV missing values represent undefined wait or abandonment fractions.
+The evaluation command requires validation records for seeds 0, 1 and 2 of both
+architectures and checks each checkpoint hash before reading test forecasts.
+Validation may reuse fixed/adaptive trials only after matching lineage, settings and
+scenario identities. The source selection artifact is never modified.
 
 | Signature | Role |
 | --- | --- |
-| `select_managers(candidates: Mapping[str, Sequence[Manager]], validation_scenarios: Sequence[Scenario], policy: CustomerPolicy, config: Config) -> tuple[dict[str, Manager], list[dict]]` | Rank candidates within each family on validation mean daily profit under mean abandonment constraint; fallback to abandonment/profit and deterministic candidate order. Return selected managers and all trial metrics. |
+| `select_managers(candidates: Mapping[str, Sequence[Manager]], validation_scenarios: Sequence[Scenario], policy: CustomerPolicy, config: Config, *, workers: int = 1) -> tuple[dict[str, Manager], list[dict]]` | Rank candidates within each family on validation mean daily profit under mean abandonment constraint; fallback to abandonment/profit and deterministic candidate order. Return selected managers and all trial metrics. |
 | `evaluate(managers: Mapping[str, Manager], scenarios: Sequence[Scenario], policy: CustomerPolicy, config: Config, *, output_dir: Path, manifest: ArtifactManifest) -> list[dict]` | Run matched full days for each manager/seed, confirm frozen policy unchanged, write period/day tables and return keyed daily rows. |
 | `summarize_results(day_rows: Sequence[dict], period_rows: Sequence[dict]) -> list[dict]` | Compute weighted waits, profit, sales, waste units/cost, abandonment validity/violations, action/fallback frequencies and baseline wins. |
 | `paired_profit_intervals(day_rows: Sequence[dict], baseline: str, *, seed: int, resamples: int = 2000, confidence: float = 0.95, seed_mode: str = "mean_per_day") -> list[dict]` | Bootstrap independent scenario days, pairing policies and explicitly handling model seeds; never treat seeds as independent days. |
@@ -324,10 +331,14 @@ Business evaluation applies to all managers. Candidate managers and loaded predi
 ### `report`
 
 Reads saved CSV/JSON only, using standard library, NumPy and Matplotlib. No training or simulation imports.
+Forecast intervals resample whole scenario days with both exploration trajectories and
+all seeds retained, recomputing each seed's MAE/RMSE before averaging the metrics.
+The illustrative neural seeds are chosen on validation; the representative day is
+chosen using adaptive profit. Complexity measurements are written by evaluation.
 
 | Signature | Role |
 | --- | --- |
-| `build_report(results_dir: Path, output_dir: Path) -> list[Path]` | Produce required static plots, complexity table and a factual interpretation draft; return generated paths. |
+| `build_report(results_dir: Path, output_dir: Path) -> list[Path]` | Produce paired forecast/business intervals, seed-variability tables, static plots and a factual interpretation draft from saved results; return generated paths. |
 | `select_representative_day(day_rows: Sequence[dict], *, reference_manager: str = "adaptive") -> str` | Choose the scenario nearest median reference-manager profit, with scenario-ID tie break, before plotting all managers on that same day. |
 
 ### `cli`

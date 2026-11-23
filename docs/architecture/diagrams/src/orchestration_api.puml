@@ -12,7 +12,7 @@ skinparam wrapWidth 420
 
 package "evaluate" as pkg_evaluate {
 class "evaluate.py" as evaluate_functions <<module>> {
-  + select_managers(candidates: Mapping[str, Sequence[Manager]], validation_scenarios: Sequence[Scenario],\n    policy: CustomerPolicy, config: Config) -> tuple[dict[str, Manager], list[dict]]
+  + select_managers(candidates: Mapping[str, Sequence[Manager]], validation_scenarios: Sequence[Scenario],\n    policy: CustomerPolicy, config: Config, *, workers: int = 1) -> tuple[dict[str, Manager], list[dict]]
   + evaluate(managers: Mapping[str, Manager], scenarios: Sequence[Scenario], policy: CustomerPolicy,\n    config: Config, *, output_dir: Path, manifest: ArtifactManifest) -> list[dict]
   + summarize_results(day_rows: Sequence[dict], period_rows: Sequence[dict]) -> list[dict]
   + paired_profit_intervals(day_rows: Sequence[dict], baseline: str, *, seed: int, resamples: int = 2000,\n    confidence: float = 0.95, seed_mode: str = 'mean_per_day') -> list[dict]

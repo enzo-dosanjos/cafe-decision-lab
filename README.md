@@ -3,8 +3,11 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
-**Status:** market simulation, customer training and management dataset generation run end to end.
-The next milestone is the adaptive baseline and MLP outcome predictor.
+**Status:** fixed, adaptive, MLP and LSTM managers support validation selection and
+matched held-out evaluation with three neural training seeds. Forecast diagnostics,
+paired day-bootstrap intervals, seed variability and static report figures are available.
+The full comparison has been exercised on 150 held-out scenario days, with recurrent
+reset, matched-day and accounting checks.
 
 From the repository root, install into your Python environment and run:
 
@@ -61,6 +64,26 @@ The experiment stores replayable schedules under `scenarios/`. Its `dataset/`
 directory contains factual period records, scenario splits, raw four-period windows
 for each split, and scalers fitted on training periods. The manifest identifies
 the frozen customer tables and checkpoint file by hash.
+
+## MLP training and manager validation
+
+Install the neural dependencies, train the seed-0 MLP, then compare managers using
+the same customer experiment used to generate the dataset:
+
+```sh
+python -m pip install -e ".[neural]"
+python -m cafe.cli train --model mlp --seed 0 --experiment-dir artifacts/management-4000
+python -m cafe.cli validate-managers --seed 0 --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-mlp-0
+```
+
+Training reads the saved training and validation splits and training-only scalers.
+It selects the epoch with the lowest validation loss and saves its weights and
+per-epoch metrics under `models/mlp/` in the dataset experiment. Validation runs
+all fixed actions, eight adaptive rules and the trained MLP on complete matched
+days. `selection.json` records each candidate's settings, daily actions, realized
+profit and abandonment, plus the selected candidate for each family. Set
+`--workers` to parallelize independent validation days on CPU. Use a fresh
+output directory for each comparison.
 
 ## Documentation
 

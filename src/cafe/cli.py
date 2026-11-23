@@ -2,7 +2,7 @@
 
 import argparse
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from hashlib import sha256
 import json
 from math import isclose
@@ -251,6 +251,293 @@ def _generate_data(config: Config, customer_dir: Path, output_dir: Path) -> None
     print(f"Saved {len(records)} management periods to {output_dir / 'dataset'}")
 
 
+def _model_inputs(experiment: Path) -> tuple[Config, ArtifactManifest, dict[str, str]]:
+    """Check the dataset identity and bind model lineage to the exact fitting inputs."""
+    from .data.storage import load_manifest
+
+    config = load_config(experiment / "config.json")
+    root = ArtifactManifest(**json.loads((experiment / "manifest.json").read_text()))
+    dataset = experiment / "dataset"
+    _, splits = load_manifest(dataset, root)
+    catalogue = _catalogue_json(build_catalogue(config))
+
+    if (root.config_hash != config_hash(config) or root.catalogue_hash != sha256(catalogue.encode()).hexdigest()
+            or tuple(root.feature_names) != FEATURE_NAMES or tuple(root.target_names) != TARGET_NAMES
+            or root.schema_version != "1" or root.simulator_version != "1"):
+        raise ValueError(f"{experiment}: incompatible dataset configuration, catalogue or fields")
+
+    parents = dict(root.parent_hashes)
+
+    for filename in ("manifest.json", "splits.json", "train.npz", "validation.npz", "scalers.json"):
+        parents[filename] = sha256((dataset / filename).read_bytes()).hexdigest()
+
+    return config, replace(root, parent_hashes=parents), splits
+
+
+def _train_model(args: argparse.Namespace) -> None:
+    """Fit on training periods and select the checkpoint on validation periods."""
+    from .data.scaling import load_scalers
+    from .data.storage import load_arrays
+    from .models.training import train_predictor
+
+    config, manifest, splits = _model_inputs(args.experiment_dir)
+    dataset = args.experiment_dir / "dataset"
+    arrays = {}
+    periods = config.simulation["day_minutes"] // config.simulation["period_minutes"]
+    modes = ("uniform", "hold")[:config.dataset["trajectories_per_day"]]
+
+    for split in ("train", "validation"):
+        data = load_arrays(dataset / f"{split}.npz", H=config.model["history_length"], F=config.model["feature_count"])
+        expected = {(s, mode, i) for s in splits if splits[s] == split for mode in modes for i in range(periods)}
+
+        if set(data.keys.tolist()) != expected:
+            raise ValueError(f"{dataset}: {split} array keys disagree with the scenario split")
+
+        arrays[split] = data
+
+    ids = [s for s in splits if splits[s] == "train"]
+    scalers = load_scalers(dataset / "scalers.json", ids)
+    output = args.experiment_dir / "models" / args.model
+    model = train_predictor(args.model, arrays["train"], arrays["validation"], scalers, config,
+                            seed=args.seed, device=args.device, output_dir=output, manifest=manifest)
+    print(f"Saved {output / f'seed-{args.seed}.pt'} ({sum(p.numel() for p in model.parameters())} parameters)")
+
+
+def _management_inputs(experiment: Path, customer_dir: Path, split: str) -> tuple:
+    """Validate customers and saved schedules before complete management rollouts."""
+    from .simulation.scenarios import load_scenario
+
+    config, manifest, splits = _model_inputs(experiment)
+    catalogue = build_catalogue(config)
+    policy, _, excluded_seeds = _load_dataset_policy(config, customer_dir, _catalogue_json(catalogue))
+    policy_path = customer_dir / "customers" / "policy.json"
+
+    if (policy.fingerprint() != manifest.parent_hashes["customer_policy"]
+            or sha256(policy_path.read_bytes()).hexdigest() != manifest.parent_hashes["customer_checkpoint"]):
+        raise ValueError("selected frozen customers do not match the dataset")
+
+    schedule_manifest = (experiment / "scenarios" / "manifest.json").read_bytes()
+
+    if sha256(schedule_manifest).hexdigest() != manifest.parent_hashes["schedules"]:
+        raise ValueError("incompatible management schedule manifest")
+
+    seeds = {r["id"]: r["seed"] for r in json.loads(schedule_manifest)["scenarios"]}
+    scenarios = []
+
+    for identity in sorted(s for s in splits if splits[s] == split):
+        scenario = load_scenario(experiment / "scenarios" / f"{identity}.npz")
+
+        if (scenario.scenario_id != identity or scenario.group != "management"
+                or scenario.seed != seeds[identity] or scenario.seed in excluded_seeds):
+            raise ValueError(f"incompatible management schedule {identity}")
+
+        scenarios.append(scenario)
+
+    return config, manifest, catalogue, policy, scenarios
+
+
+def _validate_managers(args: argparse.Namespace) -> None:
+    """Rank baseline and neural candidates on saved validation days only."""
+    from itertools import product
+
+    from .evaluate import select_managers
+    from .managers.adaptive import AdaptiveManager
+    from .managers.mlp import MLPManager
+    from .models.training import load_checkpoint
+
+    experiment = args.experiment_dir
+    output = args.output_dir
+
+    if output.exists():
+        raise FileExistsError(output)
+
+    config, manifest, catalogue, policy, scenarios = _management_inputs(experiment, args.customer_dir, "validation")
+    seeds = args.seeds if args.seeds is not None else [args.seed]
+
+    if len(seeds) != len(set(seeds)) or min(seeds) < 0 or len(args.models) != len(set(args.models)):
+        raise ValueError("expected distinct nonnegative seeds and distinct model families")
+
+    variants = [{"alpha": a, "buffer": b, "queue_threshold": q}
+                for a, b, q in product((0.3, 0.6), (1.0, 1.25), (3, 6))]
+    settings = {"fixed": [{"action_id": a.action_id} for a in catalogue], "adaptive": variants}
+    candidates = {"fixed": [FixedManager(a) for a in catalogue],
+                  "adaptive": [AdaptiveManager(catalogue, config, **v) for v in variants]}
+    cached_trials = []
+
+    if args.baseline_selection:
+        cached = json.loads(args.baseline_selection.read_text())
+
+        if cached["manifest"] != json.loads(json.dumps(asdict(manifest))):
+            raise ValueError("baseline selection belongs to another dataset")
+
+        for family in ("fixed", "adaptive"):
+            rows = [r for r in cached["trials"] if r["family"] == family]
+
+            if (len(rows) != len(settings[family])
+                    or {r["candidate"] for r in rows} != set(range(len(settings[family])))
+                    or any(r["settings"] != settings[family][r["candidate"]]
+                           or {d["scenario_id"] for d in r["days"]} != {d.scenario_id for d in scenarios}
+                           or len(r["days"]) != len(scenarios) for r in rows)):
+                raise ValueError("baseline selection has incompatible candidates or validation days")
+
+            cached_trials.extend(rows)
+            del candidates[family]
+
+    from .managers.lstm import LSTMManager
+
+    for family in args.models:
+        settings[family], candidates[family] = [], []
+
+        for seed in seeds:
+            checkpoint = experiment / "models" / family / f"seed-{seed}.pt"
+            predictor = load_checkpoint(checkpoint, manifest)
+            manager_class = MLPManager if family == "mlp" else LSTMManager
+            candidates[family].append(manager_class(predictor, catalogue, config))
+            settings[family].append({"seed": seed, "checkpoint_sha256": sha256(checkpoint.read_bytes()).hexdigest()})
+
+    selected, trials = select_managers(candidates, scenarios, policy, config, workers=args.workers)
+    winners = {}
+
+    for row in trials:
+        family, index = row["family"], row["candidate"]
+        row["settings"] = settings[family][index]
+
+        if selected[family] is candidates[family][index]:
+            winners[family] = {key: value for key, value in row.items() if key != "days"}
+
+    for family in ("fixed", "adaptive"):
+        rows = [r for r in cached_trials if r["family"] == family]
+
+        if rows:
+            feasible = [r for r in rows if r["mean_period_abandonment"] <= config.evaluation["abandonment_limit"]]
+            winner = min(feasible, key=lambda r: (-r["mean_daily_profit"], r["candidate"])) if feasible else min(
+                rows, key=lambda r: (r["mean_period_abandonment"], -r["mean_daily_profit"], r["candidate"]))
+            winners[family] = {key: value for key, value in winner.items() if key != "days"}
+
+    output.mkdir(parents=True)
+    _save_report({"manifest": asdict(manifest), "selected": winners, "trials": cached_trials + trials,
+                  "baseline_selection_sha256": sha256(args.baseline_selection.read_bytes()).hexdigest()
+                  if args.baseline_selection else None}, output / "selection.json")
+    print(json.dumps(winners, indent=2))
+
+
+def _evaluate_managers(args: argparse.Namespace) -> None:
+    """Freeze validation choices, then report all requested seeds on untouched test days."""
+    from .data.storage import load_arrays
+    from .evaluate import evaluate, paired_profit_intervals, measure_decision_latency, _write_csv
+    from .managers.adaptive import AdaptiveManager
+    from .managers.mlp import MLPManager
+    from .managers.lstm import LSTMManager
+    from .models.training import load_checkpoint
+    from .models.evaluation import evaluate_forecasts
+    import torch
+
+    if args.output_dir.exists():
+        raise FileExistsError(args.output_dir)
+
+    selection_bytes = args.selection.read_bytes()
+    selection = json.loads(selection_bytes)
+    config, manifest, catalogue, policy, scenarios = _management_inputs(args.experiment_dir, args.customer_dir, "test")
+
+    if selection["manifest"] != json.loads(json.dumps(asdict(manifest))):
+        raise ValueError("selection belongs to another dataset")
+
+    winners = selection["selected"]
+    managers = {"fixed": FixedManager(catalogue[winners["fixed"]["settings"]["action_id"]]),
+                "adaptive": AdaptiveManager(catalogue, config, **winners["adaptive"]["settings"])}
+    forecast_rows, metrics = [], []
+    checkpoints = {}
+
+    for family, manager_class in (("mlp", MLPManager), ("lstm", LSTMManager)):
+        trials = sorted((r for r in selection["trials"] if r["family"] == family), key=lambda r: r["settings"]["seed"])
+
+        if len(trials) != 3 or {r["settings"]["seed"] for r in trials} != {0, 1, 2}:
+            raise ValueError(f"final evaluation requires validation results for {family} seeds 0, 1 and 2")
+
+        for trial in trials:
+            seed = trial["settings"]["seed"]
+            checkpoint = args.experiment_dir / "models" / family / f"seed-{seed}.pt"
+            digest = sha256(checkpoint.read_bytes()).hexdigest()
+
+            if digest != trial["settings"]["checkpoint_sha256"]:
+                raise ValueError(f"{checkpoint}: checkpoint changed after validation")
+
+            label = f"{family}-seed-{seed}"
+            predictor = load_checkpoint(checkpoint, manifest)
+            managers[label] = manager_class(predictor, catalogue, config)
+            checkpoints[label] = digest
+
+    # No selection or tuning occurs below this point; all six checkpoints are retained.
+    for split in ("validation", "test"):
+        arrays = load_arrays(args.experiment_dir / "dataset" / f"{split}.npz",
+                             H=config.model["history_length"], F=config.model["feature_count"])
+        splits = json.loads((args.experiment_dir / "dataset" / "splits.json").read_text())
+        periods = config.simulation["day_minutes"] // config.simulation["period_minutes"]
+        modes = ("uniform", "hold")[:config.dataset["trajectories_per_day"]]
+        expected = {(s, mode, i) for s in splits if splits[s] == split for mode in modes for i in range(periods)}
+
+        if set(arrays.keys.tolist()) != expected:
+            raise ValueError(f"{split}: forecast keys do not match scenario split")
+
+        for label, manager in managers.items():
+            if not hasattr(manager, "predictor"):
+                continue
+
+            rows, scores = evaluate_forecasts(manager.predictor, arrays)
+            forecast_rows.extend({"split": split, "manager": label, **r} for r in rows)
+            metrics.append({"split": split, "manager": label, **scores})
+
+    manifest = replace(manifest, scenario_ids=tuple(s.scenario_id for s in scenarios),
+                       parent_hashes={**manifest.parent_hashes, **checkpoints,
+                                      "selection": sha256(selection_bytes).hexdigest(),
+                                      "test.npz": sha256((args.experiment_dir / "dataset" / "test.npz").read_bytes()).hexdigest()},
+                       package_versions={"python": platform.python_version(), "numpy": np.__version__, "torch": torch.__version__})
+    days = evaluate(managers, scenarios, policy, config, output_dir=args.output_dir, manifest=manifest)
+    intervals = []
+
+    for baseline in ("fixed", "adaptive"):
+        for mode in ("mean_per_day", "separate"):
+            intervals.extend(paired_profit_intervals(days, baseline, seed=config.seeds["split"], seed_mode=mode))
+
+    _write_csv(forecast_rows, args.output_dir / "forecasts.csv")
+    _write_csv(metrics, args.output_dir / "forecast_metrics.csv")
+    _write_csv(intervals, args.output_dir / "paired_profit.csv")
+
+    import copy
+    import csv
+
+    # Measure a separate manager on one chronological validation trajectory.
+    validation = load_arrays(args.experiment_dir / "dataset" / "validation.npz",
+                             H=config.model["history_length"], F=config.model["feature_count"])
+    first = validation.keys[0]
+    indices = np.flatnonzero((validation.keys["scenario_id"] == first["scenario_id"])
+                             & (validation.keys["trajectory_id"] == first["trajectory_id"]))
+    indices = indices[np.argsort(validation.keys["period_index"][indices])]
+    complexity = []
+
+    for label, manager in managers.items():
+        row = {"manager": label, "device": "cpu", "threads": torch.get_num_threads(),
+               **measure_decision_latency(copy.deepcopy(manager), validation.history[indices])}
+        predictor = getattr(manager, "predictor", None)
+        row["parameters"] = sum(p.numel() for p in predictor.parameters()) if predictor is not None else 0
+
+        if predictor is not None:
+            family, seed = label.split("-seed-")
+
+            with (args.experiment_dir / "models" / family / f"seed-{seed}-epochs.csv").open() as stream:
+                epochs = list(csv.DictReader(stream))
+
+            row.update(training_seconds=float(epochs[-1]["elapsed_seconds"]), epochs=len(epochs),
+                       best_epoch=int(epochs[-1]["best_epoch"]))
+
+        complexity.append(row)
+
+    _write_csv(complexity, args.output_dir / "complexity.csv")
+    _save_report({"device": "cpu", "seed_policy": "all seeds; paired intervals average seeds within each day, plus separate seed intervals",
+                  "selected_on_validation": winners, "independent_test_days": len(scenarios)}, args.output_dir / "protocol.json")
+    print(f"Saved matched test results to {args.output_dir}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Dispatch experiment stages using explicit configuration and artifact paths."""
     parser = argparse.ArgumentParser(prog="python -m cafe.cli")
@@ -269,7 +556,53 @@ def main(argv: Sequence[str] | None = None) -> int:
     data.add_argument("--customer-dir", type=Path, required=True, help="selected customer training experiment")
     data.add_argument("--output-dir", type=Path, required=True, help="new dataset experiment directory")
 
+    model = sub.add_parser("train", help="fit a supervised outcome predictor")
+    model.add_argument("--experiment-dir", type=Path, required=True)
+    model.add_argument("--model", choices=("mlp", "lstm"), default="mlp")
+    model.add_argument("--device", default="cpu")
+    model.add_argument("--seed", type=int, default=0)
+    validation = sub.add_parser("validate-managers", help="rank managers on matched validation days")
+    validation.add_argument("--experiment-dir", type=Path, required=True)
+    validation.add_argument("--customer-dir", type=Path, required=True)
+    validation.add_argument("--output-dir", type=Path, required=True)
+    validation.add_argument("--seed", type=int, default=0)
+    validation.add_argument("--workers", type=int, default=1)
+    validation.add_argument("--seeds", type=int, nargs="+")
+    validation.add_argument("--models", choices=("mlp", "lstm"), nargs="+", default=["mlp"])
+    validation.add_argument("--baseline-selection", type=Path, help="reuse checked fixed/adaptive validation trials")
+    evaluation = sub.add_parser("evaluate", help="report matched held-out days for all three neural seeds")
+    evaluation.add_argument("--experiment-dir", type=Path, required=True)
+    evaluation.add_argument("--customer-dir", type=Path, required=True)
+    evaluation.add_argument("--selection", type=Path, required=True)
+    evaluation.add_argument("--output-dir", type=Path, required=True)
+    report = sub.add_parser("report", help="build static figures and uncertainty tables from saved results")
+    report.add_argument("--results-dir", type=Path, required=True)
+    report.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
+
+    if args.command == "report":
+        from .report import build_report
+
+        paths = build_report(args.results_dir, args.output_dir)
+        print(f"Saved {len(paths)} report artifacts to {args.output_dir}")
+
+        return 0
+
+    if args.command == "evaluate":
+        _evaluate_managers(args)
+
+        return 0
+
+    if args.command == "validate-managers":
+        _validate_managers(args)
+
+        return 0
+
+    if args.command == "train":
+        _train_model(args)
+
+        return 0
+
     config = load_config(args.config)
 
     if args.command == "generate-data":

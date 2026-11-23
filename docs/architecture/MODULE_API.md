@@ -293,6 +293,8 @@ Thin format functions for dataset records and manifests; not a generic storage f
 ### `models.training`
 
 One supervised training loop supports both predictor subclasses; customer training is not imported.
+The LSTM alone uses the configured recurrent gradient-norm clipping. Existing seed
+checkpoints/logs are protected; legacy MLP checkpoint fields remain loadable.
 
 | Signature | Role |
 | --- | --- |

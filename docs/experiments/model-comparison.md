@@ -58,13 +58,17 @@ The follow-up sensitivity screen varied hidden widths, activation, initializatio
 
 ## Fresh-day confirmation
 
-The validation winner was fixed before these rollouts. A new scenario seed namespace generated 150 customer schedules. Every manager saw the same schedules. Neural results average the three training seeds within each day.
+The validation winner was fixed before these rollouts. A new scenario seed namespace generated 150 customer schedules. The expanded confirmation also ran the selected adaptive rule and the original three LSTM checkpoints on the same schedules. Neural results average the three training seeds within each day.
 
-| Manager | Mean HKD/day | Periods above five abandonments |
-|---|---:|---:|
-| fixed | 3,284.30 | 15.54% |
-| rnn-0.001 | 3,466.32 | 8.08% |
-| adam-0.001 | 3,389.74 | 6.28% |
+| Manager | Mean HKD/day | Mean abandonments/period | Periods above five |
+|---|---:|---:|---:|
+| Fixed | 3,284.30 | 2.655 | 15.54% |
+| Adaptive | 2,159.38 | 1.423 | 6.88% |
+| Vanilla RNN | 3,466.32 | 1.659 | 8.08% |
+| MLP | 3,389.74 | 1.420 | 6.28% |
+| LSTM | 3,414.71 | 1.529 | 7.33% |
+
+The paired RNN–LSTM gain was HKD 51.60 per day (95% interval 37.41–65.83).
 
 The paired gain over fixed was HKD 182.02 per day (95% paired day bootstrap interval 140.75 to 224.47).
 The paired gain over adam-0.001 was HKD 76.58 per day (95% paired day bootstrap interval 60.78 to 92.42).
@@ -77,7 +81,7 @@ From the repository root, substitute the directory containing the selected 4,000
 
 ```sh
 OMP_NUM_THREADS=1 python scripts/model_comparison.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/model-comparison-repeat
-OMP_NUM_THREADS=1 python scripts/confirm_manager.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --study-dir runs/model-comparison-repeat
+OMP_NUM_THREADS=1 python scripts/confirm_manager.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --study-dir runs/model-comparison-repeat --selection runs/validation-three-seed/selection.json
 ```
 
 For exact replay of an archived confirmation, pass its scenario ID prefix with `--scenario-prefix` (the portion before the three-digit day index). Customer tie-breaking uses the scenario ID as well as the seed.

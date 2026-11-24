@@ -3,6 +3,45 @@
 A controlled two-café experiment comparing fixed, adaptive, MLP and LSTM managers
 on profit, customer abandonment, waiting and waste.
 
+[Final report](docs/FINAL_REPORT.md) · [Model comparison](docs/experiments/model-comparison.md)
+
+## Reproduce the reported experiment
+
+Start in a fresh checkout. The commands below regenerate the selected customer policy,
+the management dataset, the three-seed baseline selection and the fresh-day comparison.
+The original customer run used Python 3.12.16 and NumPy 1.26.4 on CPU. For reproducing
+the original artifact versions, the dataset stage used Python 3.14.8 and NumPy 2.4.6,
+and neural training used Python 3.13.18, NumPy 2.5.4 and CPU PyTorch 2.14.1. Package versions are recorded in the
+artifacts and can affect hashes and numerical results.
+
+```sh
+# Use the three stage-specific interpreters to reproduce the recorded environment.
+python3.12 -m venv venv/customers
+python3.14 -m venv venv/data
+python3.13 -m venv venv/models
+venv/customers/bin/python -m pip install -e . numpy==1.26.4
+venv/data/bin/python -m pip install -e . numpy==2.4.6
+venv/models/bin/python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+venv/models/bin/python -m pip install -e ".[neural,report]" numpy==2.5.4
+. venv/models/bin/activate
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+venv/customers/bin/python -m cafe.cli train-customers --config config/customers-4000.json --output-dir artifacts/customers-4000
+venv/data/bin/python -m cafe.cli generate-data --config config/default.json --customer-dir artifacts/customers-4000 --output-dir artifacts/management-4000
+for model in mlp lstm; do
+  for seed in 0 1 2; do
+    python -m cafe.cli train --model "$model" --seed "$seed" --experiment-dir artifacts/management-4000
+  done
+done
+python -m cafe.cli validate-managers --models mlp lstm --seeds 0 1 2 --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/validation-three-seed
+python scripts/model_comparison.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --output-dir runs/model-comparison
+python scripts/confirm_manager.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --study-dir runs/model-comparison --selection runs/validation-three-seed/selection.json
+```
+
+The reported frozen table fingerprint is `a43b7230f395762c659de2cc4a36e9e764b9fe46ad591ffa74b646f274477ace`.
+Dataset generation writes elapsed wall-clock seconds to `timing.json` in the experiment
+directory. Evaluation includes this shared duration in `complexity.csv`; older datasets
+without a timer leave that field empty.
+
 **Status:** fixed, adaptive, MLP and LSTM managers support validation selection and
 matched held-out evaluation with three neural training seeds. Forecast diagnostics,
 paired day-bootstrap intervals, seed variability and static report figures are available.
@@ -149,4 +188,17 @@ simulation and customers, managers and models, data, neural training, and evalua
         └── diagrams/
             ├── src/           # PlantUML sources
             └── rendered/      # SVG previews
+```
+
+## Service limits, history length and scheduled actions
+
+After running the published model comparison above, run each sensitivity experiment
+in its own output directory. Every reported violation uses the same threshold of five
+abandonments per period.
+
+```sh
+for mode in 2 5 10 profit history schedule; do
+  python scripts/service_study.py --mode "$mode" --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --study-dir runs/model-comparison --selection runs/validation-three-seed/selection.json --output-dir runs/service-study
+done
+python scripts/summarize_service.py --service-dir runs/service-study --confirmation runs/model-comparison/confirmation.json --figure runs/service-study/profit-service.png
 ```

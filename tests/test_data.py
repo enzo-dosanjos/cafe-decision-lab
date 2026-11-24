@@ -124,6 +124,8 @@ class ManagementDataTests(unittest.TestCase):
             command = ["generate-data", "--config", str(path), "--customer-dir", str(source), "--output-dir", str(output)]
             main(command)
             dataset = output / "dataset"
+            timing = json.loads((output / "timing.json").read_text())
+            self.assertGreater(timing["dataset_generation_seconds"], 0)
             manifest = ArtifactManifest(**json.loads((output / "manifest.json").read_text()))
             _, splits = load_manifest(dataset, manifest)
             rows = load_records(dataset / "periods.csv")

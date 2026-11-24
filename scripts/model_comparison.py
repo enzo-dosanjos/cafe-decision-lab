@@ -113,9 +113,12 @@ SENSITIVITY = (
 )
 
 
-def make_model(name: str, stats: ScalerStats) -> OutcomePredictor:
+def make_model(name: str, stats: ScalerStats, *, history_length: int = 4) -> OutcomePredictor:
     """Construct one architecture with a shared raw-unit prediction contract."""
-    model = MLPPredictor(stats)
+    if history_length != 4 and (name not in ("rnn", "adam") or history_length != 1):
+        raise ValueError("the one-observation ablation supports the vanilla RNN and baseline MLP")
+
+    model = MLPPredictor(stats, H=history_length)
 
     if name == "affine":
         model.network = nn.Linear(127, 5)
@@ -171,10 +174,11 @@ def run(
     stats: ScalerStats,
     epochs: int,
     output: Path,
+    *, history_length: int = 4,
 ) -> tuple[float, int]:
     """Fit one candidate and retain the earliest minimum validation loss."""
     torch.manual_seed(seed)
-    model = make_model(name, stats)
+    model = make_model(name, stats, history_length=history_length)
     n = len(training[0])
     batch = {"gd": n, "single-sgd": 1, "batch32": 32, "batch512": 512}.get(name, 128)
     optimizer = {

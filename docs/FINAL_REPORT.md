@@ -115,6 +115,6 @@ Regenerating the management dataset took 862.63 seconds of wall time with other 
 
 ## 7. Decision and limits
 
-For this simulator’s objective, **select the vanilla RNN**. It met the validation service constraint and its profit advantage persisted on fresh days. If management instead prioritizes the frequency of periods exceeding five abandonments, the MLP has the strongest fresh-day result. A hard per-period service requirement would call for evaluating a different decision rule.
+For this simulator’s objective, **select the vanilla RNN**. It met the validation service constraint and its profit advantage persisted on fresh days. At decision limit five, the MLP had the fewest periods above five realized abandonments (6.28%). At limit two, the RNN lowered that rate to 4.35%, and the MLP reached 3.53%. The operating limit can therefore matter as much as the architecture when choosing a service target. A hard per-period service requirement would call for evaluating a different decision rule.
 
 The uncertainty intervals resample matched days and are conditional on the trained seeds and simulated population. The market contains one fixed competitor, a frozen customer policy, a discrete catalogue and a four-period history. Prices and costs are model assumptions. These experiments support a choice within that setting; deployment would require independent evidence on actual arrivals, customer response and operating costs. The code, configuration and workflow are documented in the [project README](../README.md).

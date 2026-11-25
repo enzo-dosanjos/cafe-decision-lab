@@ -104,6 +104,10 @@ def main() -> None:
         ax.set_ylabel("Mean daily profit (HKD)")
         ax.grid(alpha=0.2)
 
+    axes[1].set_title(
+        "LSTM sweep uses 35-epoch study checkpoints\n"
+        "Confirmation table uses original LSTM checkpoints", fontsize=10
+    )
     fig.suptitle(
         "Decision limit: circle = 2, square = 5, triangle = 10, cross = profit only"
     )

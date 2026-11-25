@@ -64,13 +64,17 @@ The pilot favored Adam at 0.01 over 0.001, but on full training data the lower r
 
 ## 5. Fresh-day confirmation and operating behavior
 
-We fixed the validation winner before generating 150 additional days. The original MLP and fixed action 4 serve as references. The LSTM and adaptive manager were evaluated in the original test. Profit levels across the two experiments also reflect different demand schedules.
+We fixed the validation winner before generating 150 additional days. The fixed and adaptive rules use their original validation-selected settings. We replayed all three original LSTM checkpoints alongside the MLP and RNN. Profit levels across the two held-out experiments also reflect different demand schedules.
 
-| Manager | Mean daily profit (HKD) | Periods above five abandonments |
-|---|---:|---:|
-| Fixed | 3,284.30 | 15.54% |
-| MLP | 3,389.74 | 6.28% |
-| RNN | **3,466.32** | 8.08% |
+| Manager | Mean daily profit (HKD) | Realized mean abandonments per period | Periods above five |
+|---|---:|---:|---:|
+| Fixed | 3,284.30 | 2.655 | 15.54% |
+| Adaptive | 2,159.38 | 1.423 | 6.88% |
+| MLP | 3,389.74 | 1.420 | 6.28% |
+| LSTM | 3,414.71 | 1.529 | 7.33% |
+| RNN | **3,466.32** | 1.659 | 8.08% |
+
+The RNN gained **HKD 51.60 per day over the LSTM** (95% paired day bootstrap interval 37.41–65.83), with 0.75 percentage points more periods above five abandonments. The LSTM result averages seeds within day. Its individually validation-selected checkpoint, seed 1, earned HKD 3,425.93 per day.
 
 The RNN gained HKD 76.58 per day over the MLP (95% paired interval 60.78–92.42) and HKD 182.02 over fixed (140.75–224.47). The distribution shows how much the payoff varied with the day. Orange dashed lines mark mean gains; black lines mark equal profit.
 
@@ -88,8 +92,29 @@ The RNN gained HKD 76.58 per day over the MLP (95% paired interval 60.78–92.42
 
 Costs follow directly from the logged actions; revenue equals profit plus both costs. Relative to fixed, the RNN added staffing while reducing preparation and increasing revenue. Relative to the MLP, it spent less on both inputs and accepted more service violations. The accounts explain the profit difference exactly up to rounding. They cannot isolate the effect of changing staffing alone because prices, stock and customer responses also changed.
 
-## 6. Decision and limits
+## 6. Profit, service and observation history
 
-For this simulator’s objective, **select the vanilla RNN**. It met the validation service constraint and its profit advantage persisted on fresh days. If management instead prioritizes the frequency of periods exceeding five abandonments, the MLP has the strongest fresh-day result. A hard per-period service requirement would call for evaluating a different decision rule.
+We reused the trained predictors and reselected fixed and adaptive settings on validation for each decision limit. All points below count realized violations against the same threshold of **more than five abandonments per period**. These sensitivity analyses reuse the 150 confirmation schedules. The LSTM sweep uses the 35-epoch model-comparison recipe, while the confirmation table evaluates the original selected LSTM checkpoints.
+
+| RNN decision limit | Daily profit (HKD) | Mean abandonments per period | Periods above five |
+|---|---:|---:|---:|
+| 2 | 3,357.46 | 1.263 | 4.35% |
+| 5 | 3,466.32 | 1.659 | 8.08% |
+| 10 | 3,480.78 | 1.715 | 8.47% |
+| Profit only | 3,482.44 | 1.717 | 8.46% |
+
+Tightening the RNN limit from five to two cost HKD 108.86 per day and reduced violations by 3.74 percentage points using unrounded rates. Removing the limit gained HKD 16.12 over the limit of five. At limit two, the MLP had the lowest violation rate (3.53%) and earned HKD 3,266.65 per day.
+
+![Mean daily profit against the share of periods exceeding five abandonments for each manager and decision limit](figures/profit-service.png)
+
+With a single observation, the MLP earned HKD 3,422.69 per day and the RNN earned HKD 3,439.60. Moving from one to four observations **reduced MLP profit by HKD 32.96** (paired 95% interval −53.33 to −13.06) and **increased RNN profit by HKD 26.71** (10.81 to 42.39). The MLP’s violation rate fell from 7.46% to 6.28%, while the RNN’s rose from 7.83% to 8.08%. A single observation still contains lagged operating metrics.
+
+The time-of-day baseline selected action 4 independently for all four two-hour blocks on validation. Its combined schedule therefore exactly reproduced the fixed manager on confirmation days. The RNN earned HKD 182.02 more per day (paired 95% interval 140.75 to 224.47). Block choices were fitted from constant-action rollouts, so this comparison covers that fitting rule, rather than an exhaustive search over interacting block choices.
+
+Regenerating the management dataset took 862.63 seconds of wall time with other experiments running concurrently. The replay reproduced the archived period log byte for byte and every array in the training, validation and test splits.
+
+## 7. Decision and limits
+
+For this simulator’s objective, **select the vanilla RNN**. It met the validation service constraint and its profit advantage persisted on fresh days. At decision limit five, the MLP had the fewest periods above five realized abandonments (6.28%). At limit two, the RNN lowered that rate to 4.35%, and the MLP reached 3.53%. The operating limit can therefore matter as much as the architecture when choosing a service target. A hard per-period service requirement would call for evaluating a different decision rule.
 
 The uncertainty intervals resample matched days and are conditional on the trained seeds and simulated population. The market contains one fixed competitor, a frozen customer policy, a discrete catalogue and a four-period history. Prices and costs are model assumptions. These experiments support a choice within that setting; deployment would require independent evidence on actual arrivals, customer response and operating costs. The code, configuration and workflow are documented in the [project README](../README.md).

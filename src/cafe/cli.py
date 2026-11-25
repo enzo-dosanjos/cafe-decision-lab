@@ -9,6 +9,7 @@ from math import isclose
 from pathlib import Path
 from typing import TYPE_CHECKING
 import platform
+from time import perf_counter
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import numpy as np
@@ -189,6 +190,8 @@ def _generate_data(config: Config, customer_dir: Path, output_dir: Path) -> None
     from .data.windows import make_windows
     from .simulation.scenarios import generate_scenario
 
+    start = perf_counter()
+
     if config.dataset["trajectories_per_day"] not in (1, 2):
         raise ValueError("dataset.trajectories_per_day must be 1 (uniform) or 2 (uniform and hold)")
 
@@ -246,6 +249,7 @@ def _generate_data(config: Config, customer_dir: Path, output_dir: Path) -> None
             save_arrays(arrays, dataset / f"{split}.npz")
 
         _save_report(asdict(manifest), stage / "manifest.json")
+        _save_report({"dataset_generation_seconds": perf_counter() - start}, stage / "timing.json")
         stage.rename(output_dir)
 
     print(f"Saved {len(records)} management periods to {output_dir / 'dataset'}")
@@ -513,10 +517,12 @@ def _evaluate_managers(args: argparse.Namespace) -> None:
     indices = np.flatnonzero((validation.keys["scenario_id"] == first["scenario_id"])
                              & (validation.keys["trajectory_id"] == first["trajectory_id"]))
     indices = indices[np.argsort(validation.keys["period_index"][indices])]
+    timing_path = args.experiment_dir / "timing.json"
+    timing = json.loads(timing_path.read_text()) if timing_path.exists() else {"dataset_generation_seconds": None}
     complexity = []
 
     for label, manager in managers.items():
-        row = {"manager": label, "device": "cpu", "threads": torch.get_num_threads(),
+        row = {**timing, "manager": label, "device": "cpu", "threads": torch.get_num_threads(),
                **measure_decision_latency(copy.deepcopy(manager), validation.history[indices])}
         predictor = getattr(manager, "predictor", None)
         row["parameters"] = sum(p.numel() for p in predictor.parameters()) if predictor is not None else 0
@@ -578,7 +584,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = sub.add_parser("report", help="build static figures and uncertainty tables from saved results")
     report.add_argument("--results-dir", type=Path, required=True)
     report.add_argument("--output-dir", type=Path, required=True)
+    replay = sub.add_parser("replay", help="render a synchronized PNG or MP4")
+    source = replay.add_mutually_exclusive_group(required=True)
+    source.add_argument("--demo", action="store_true")
+    source.add_argument("--input", type=Path)
+    replay.add_argument("--at")
+    replay.add_argument("--start")
+    replay.add_argument("--end")
+    replay.add_argument("--speed", type=float, default=2)
+    replay.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
+
+    if args.command == "replay":
+        from .replay import render
+
+        render(args)
+
+        return 0
+
 
     if args.command == "report":
         from .report import build_report

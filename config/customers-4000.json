@@ -1,0 +1,11 @@
+{
+  "customer_training": {
+    "days": 4000,
+    "validation_interval": 250,
+    "validation_days": 81
+  },
+  "seeds": {
+    "scenario": 47213,
+    "customer": 38119
+  }
+}

@@ -41,7 +41,7 @@ class "CustomerInstance" as simulation_simulator_CustomerInstance <<dataclass>> 
   episode_return: float
 }
 class "simulator.py" as simulation_simulator_functions <<module>> {
-  + run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str,\n    learn: bool = False, epsilon: float = 0.0, exploration_seed: int | None = None) -> DayResult
+  + run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str,\n    learn: bool = False, epsilon: float = 0.0, exploration_seed: int | None = None,\n    snapshots: list[dict] | None = None) -> DayResult
   + build_observation(period_index: int, previous: PeriodRecord | None,\n    queue_lengths: tuple[int, int], config: Config) -> Observation
   + period_profit(action: Action, sales: Array, unit_costs: Array, staff_period_cost: float) -> float
 }

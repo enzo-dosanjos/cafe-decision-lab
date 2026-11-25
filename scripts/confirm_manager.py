@@ -1,6 +1,7 @@
 """Confirm a validation-selected recipe on fresh paired days after the original test was inspected."""
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 
@@ -8,32 +9,29 @@ import numpy as np
 import torch
 from model_comparison import make_model
 from cafe.cli import _catalogue_json, _load_dataset_policy, _model_inputs
-from cafe.contracts import build_catalogue
+from cafe.config import Config
+from cafe.contracts import ArtifactManifest, Scenario, build_catalogue
 from cafe.data.scaling import load_scalers
 from cafe.evaluate import select_managers
+from cafe.managers.adaptive import AdaptiveManager
 from cafe.managers.fixed import FixedManager
 from cafe.managers.mlp import MLPManager
+from cafe.models.training import load_checkpoint
 from cafe.simulation.scenarios import generate_scenario
 
 
-def main() -> None:
-    """Select by mean validation profit under the service constraint and run a fresh comparison."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--experiment-dir", type=Path, required=True)
-    parser.add_argument("--customer-dir", type=Path, required=True)
-    parser.add_argument("--study-dir", type=Path, required=True)
-    parser.add_argument("--scenario-prefix", default="confirm-", help="scenario ID prefix used for customer tie-breaking")
-    args = parser.parse_args()
-    root, study = args.experiment_dir, args.study_dir
-    config, manifest, splits = _model_inputs(root)
-    catalogue = build_catalogue(config)
-    policy, _, used = _load_dataset_policy(
-        config, args.customer_dir, _catalogue_json(catalogue)
-    )
+def validation_selection(path: Path, manifest: ArtifactManifest) -> dict:
+    """Require baseline trials and settings from the same management experiment."""
+    selection = json.loads(path.read_text())
 
-    if policy.fingerprint() != manifest.parent_hashes["customer_policy"]:
-        raise ValueError("selected policy differs from the management dataset")
+    if selection["manifest"] != json.loads(json.dumps(asdict(manifest))):
+        raise ValueError(f"{path}: baseline selection and dataset lineage differ")
 
+    return selection
+
+
+def confirmation_days(root: Path, config: Config, used: set[int], prefix: str = "course-confirm-") -> list[Scenario]:
+    """Regenerate the published 150 days, excluding training and management schedule seeds."""
     used.update(
         r["seed"]
         for r in json.loads((root / "scenarios/manifest.json").read_text())["scenarios"]
@@ -48,9 +46,43 @@ def main() -> None:
             used.add(seed)
             days.append(
                 generate_scenario(
-                    config, f"{args.scenario_prefix}{len(days):03}", "management", seed
+                    config, f"{prefix}{len(days):03}", "management", seed
                 )
             )
+
+    return days
+
+
+def main() -> None:
+    """Select by mean validation profit under the service constraint and run a fresh comparison."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--experiment-dir", type=Path, required=True)
+    parser.add_argument("--customer-dir", type=Path, required=True)
+    parser.add_argument("--study-dir", type=Path, required=True)
+    parser.add_argument("--scenario-prefix", default="course-confirm-", help="scenario ID prefix used for customer tie-breaking")
+    parser.add_argument("--selection", type=Path, help="override the published validation-selected baseline settings")
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--replay-scenario", help="capture one confirmation scenario instead of aggregating days")
+    parser.add_argument("--replay-output", type=Path)
+    parser.add_argument("--opening", default="08:00", help="presentation clock at simulated minute zero")
+    parser.add_argument("--replay-seed", type=int, choices=range(3), default=0)
+    parser.add_argument("--recurrent", choices=("rnn", "lstm"), default="rnn")
+    args = parser.parse_args()
+
+    if bool(args.replay_scenario) != bool(args.replay_output):
+        parser.error("--replay-scenario and --replay-output must be supplied together")
+
+    root, study = args.experiment_dir, args.study_dir
+    config, manifest, splits = _model_inputs(root)
+    catalogue = build_catalogue(config)
+    policy, _, used = _load_dataset_policy(
+        config, args.customer_dir, _catalogue_json(catalogue)
+    )
+
+    if policy.fingerprint() != manifest.parent_hashes["customer_policy"]:
+        raise ValueError("selected policy differs from the management dataset")
+
+    days = confirmation_days(root, config, used, args.scenario_prefix)
 
     trials = {}
     for path in sorted(study.glob("business-*.json")):
@@ -71,20 +103,49 @@ def main() -> None:
     stats = load_scalers(
         root / "dataset/scalers.json", sorted(s for s in splits if splits[s] == "train")
     )
-    candidates = {"fixed": [FixedManager(catalogue[4])]}
+    selected = {"fixed": {"settings": {"action_id": 4}},
+                "adaptive": {"settings": {"alpha": 0.6, "buffer": 1.0, "queue_threshold": 6}}}
 
-    for name, rate in dict.fromkeys((winner, ("adam", "0.001"))):
+    if args.selection:
+        selected = validation_selection(args.selection, manifest)["selected"]
+
+    candidates = {"fixed": [FixedManager(catalogue[selected["fixed"]["settings"]["action_id"]])],
+                  "adaptive": [AdaptiveManager(catalogue, config, **selected["adaptive"]["settings"])]}
+
+    recipes = [winner, ("adam", "0.001"), ("lstm", "0.001")]
+
+    if args.replay_scenario:
+        recipes = [("adam", "0.001"), (args.recurrent, "0.001")]
+
+    for name, rate in dict.fromkeys(recipes):
         managers = []
         for seed in range(3):
-            model = make_model(name, stats)
-            model.load_state_dict(
-                torch.load(study / f"{name}-{rate}-{seed}-35.pt", weights_only=True)
-            )
+            if name == "lstm":
+                model = load_checkpoint(root / "models" / "lstm" / f"seed-{seed}.pt", manifest)
+            else:
+                model = make_model(name, stats)
+                model.load_state_dict(torch.load(study / f"{name}-{rate}-{seed}-35.pt", weights_only=True))
+
             managers.append(MLPManager(model, catalogue, config))
 
         candidates[f"{name}-{rate}"] = managers
 
-    _, results = select_managers(candidates, days, policy, config)
+    if args.replay_scenario:
+        from cafe.replay import capture
+
+        day = next((day for day in days if day.scenario_id == args.replay_scenario), None)
+
+        if day is None:
+            parser.error(f"unknown confirmation scenario {args.replay_scenario}")
+
+        managers = [candidates["fixed"][0], candidates["adaptive"][0],
+                    candidates["adam-0.001"][args.replay_seed],
+                    candidates[f"{args.recurrent}-0.001"][args.replay_seed]]
+        capture(day, managers, policy, config, args.opening, args.replay_seed, args.replay_output)
+
+        return
+
+    _, results = select_managers(candidates, days, policy, config, workers=args.workers)
     (study / "confirmation.json").write_text(
         json.dumps({"winner": winner, "schedule_seed": 60231123, "trials": results})
     )

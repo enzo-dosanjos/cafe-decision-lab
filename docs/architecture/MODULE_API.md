@@ -65,7 +65,7 @@ Owns market state and the single event loop.
 
 | Signature | Role |
 | --- | --- |
-| `run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str, learn: bool = False, epsilon: float = 0.0, exploration_seed: int \| None = None) -> DayResult` | Reset day state and manager, execute all minute events, finalize closing departures, and return period/diagnostic records. Learning requires a mutable policy and an explicit exploration seed; frozen runs require epsilon=0. |
+| `run_day(scenario: Scenario, customer_policy: CustomerPolicy, manager: Manager, config: Config, *, trajectory_id: str, learn: bool = False, epsilon: float = 0.0, exploration_seed: int \| None = None, snapshots: list[dict] \| None = None) -> DayResult` | Optionally append post-service minute snapshots, including closing departures on the final tick. Reset day state and manager, execute all minute events, finalize closing departures, and return period/diagnostic records. Learning requires a mutable policy and an explicit exploration seed; frozen runs require epsilon=0. |
 | `build_observation(period_index: int, previous: PeriodRecord \| None, queue_lengths: tuple[int, int], config: Config) -> Observation` | Construct only the 30 allowed pre-decision features; opening previous values are zero. |
 | `period_profit(action: Action, sales: Array, unit_costs: Array, staff_period_cost: float) -> float` | Revenue minus costs of all prepared stock and all staffed employees; no additional waste penalty. |
 

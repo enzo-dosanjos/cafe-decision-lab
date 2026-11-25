@@ -82,6 +82,28 @@ class SimulatorTests(unittest.TestCase):
                        FixedManager(self.catalogue[action_id]), self.config,
                        trajectory_id="fixture", **kwargs)
 
+    def test_minute_capture(self) -> None:
+        """Check fractional service, closing and inventory without altering outcomes."""
+        import pickle
+
+        arrivals = (0,) * 5 + (7,) * 4
+        rows = []
+        traced = self.run_fixture(arrivals, snapshots=rows)
+        reference = self.run_fixture(arrivals)
+        self.assertEqual(pickle.dumps(traced), pickle.dumps(reference))
+        self.assertEqual(rows[0]["stock"], [6, 6, 6])
+        self.assertEqual(rows[1]["stock"], [5, 6, 6])
+        self.assertEqual(rows[3]["stock"], [4, 6, 6])
+        self.assertEqual(rows[4]["stock"], [6, 6, 6])
+        self.assertEqual(rows[3]["queue"], rows[4]["queue"])
+        self.assertGreater(rows[3]["queue"], 0)
+        self.assertEqual(rows[-1]["queue"], 0)
+        self.assertGreater(rows[-1]["left"], 0)
+
+        for last, record in zip(rows[3::4], traced.periods):
+            self.assertEqual(last["left"], record.abandonment)
+            self.assertEqual(last["stock"], (record.action.stock - record.sales).tolist())
+
     def test_zero_arrival_accounting_and_observation(self) -> None:
         """No demand still incurs preparation and staffing costs in both cafés."""
         result = self.run_fixture(())

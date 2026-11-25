@@ -115,7 +115,8 @@ def _accounting(cafe: CafeState, config: Config) -> dict:
 
 def run_day(scenario: Scenario, customer_policy: "CustomerPolicy", manager: Manager,
             config: Config, *, trajectory_id: str, learn: bool = False,
-            epsilon: float = 0.0, exploration_seed: int | None = None) -> DayResult:
+            epsilon: float = 0.0, exploration_seed: int | None = None,
+            snapshots: list[dict] | None = None) -> DayResult:
     """Run one day; learning requires a mutable policy and explicit exploration seed.
 
     Queues and fractional credit cross period boundaries. Prices and inventory are
@@ -337,10 +338,18 @@ def run_day(scenario: Scenario, customer_policy: "CustomerPolicy", manager: Mana
                 customer.episode_return -= waiting_cost
                 customer.elapsed_wait += 1
 
-    # Closing departures belong to the last period, so count them before its record.
-    for cafe in cafes:
-        while cafe.queue:
-            departure(cafe.queue.popleft(), "closing")
+        # Count closing departures before capturing the final inventory and queue.
+        if minute == day_minutes - 1:
+            for cafe in cafes:
+                while cafe.queue:
+                    departure(cafe.queue.popleft(), "closing")
+
+        if snapshots is not None:
+            cafe = cafes[0]
+            snapshots.append(dict(minute=minute, period=len(periods), action=cafe.action.action_id,
+                                  price=cafe.action.prices[0] / config.products[0]["base_price"],
+                                  staff=cafe.action.staff, queue=len(cafe.queue), stock=cafe.inventory.tolist(),
+                                  left=cafe.abandonment))
 
     finalize()
     entries = sum(row.entries for row in periods)

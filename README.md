@@ -202,3 +202,24 @@ for mode in 2 5 10 profit history schedule; do
 done
 python scripts/summarize_service.py --service-dir runs/service-study --confirmation runs/model-comparison/confirmation.json --figure runs/service-study/profit-service.png
 ```
+
+## Synchronized café replay
+
+With the artifacts from the reproduction workflow above, capture a single confirmation
+day and one neural seed. The opening clock is a presentation setting because the
+simulator records minutes since opening. The default fourth card uses the vanilla
+RNN. Pass `--recurrent lstm` to replay the original LSTM checkpoint instead.
+
+```sh
+python scripts/confirm_manager.py --experiment-dir artifacts/management-4000 --customer-dir artifacts/customers-4000 --study-dir runs/model-comparison --selection runs/validation-three-seed/selection.json --replay-scenario course-confirm-000 --replay-seed 0 --opening 08:00 --replay-output runs/replay/rnn.json
+python -m cafe.cli replay --input runs/replay/rnn.json --at 12:10 --output runs/replay/measured.png
+python -m cafe.cli replay --input runs/replay/rnn.json --start 12:00 --end 12:03 --output runs/replay/lunch.mp4
+python -m cafe.cli replay --demo --at 12:10 --output runs/replay/demo.png
+```
+
+Rendering a saved bundle requires the `report` extra. MP4 also requires FFmpeg
+on PATH. Both endpoints are included. The default speed is two simulated minutes
+per second at 30 fps. Every card shows Café A after processing the shared minute.
+Queue departures accumulate within each management period. The final frame includes
+closing departures and shows remaining stock before disposal. The separate synthetic
+demo spans 12:00–12:12 and changes management periods at 12:11.

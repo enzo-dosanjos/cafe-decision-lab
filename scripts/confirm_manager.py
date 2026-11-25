@@ -62,7 +62,16 @@ def main() -> None:
     parser.add_argument("--scenario-prefix", default="course-confirm-", help="scenario ID prefix used for customer tie-breaking")
     parser.add_argument("--selection", type=Path, help="override the published validation-selected baseline settings")
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--replay-scenario", help="capture one confirmation scenario instead of aggregating days")
+    parser.add_argument("--replay-output", type=Path)
+    parser.add_argument("--opening", default="08:00", help="presentation clock at simulated minute zero")
+    parser.add_argument("--replay-seed", type=int, choices=range(3), default=0)
+    parser.add_argument("--recurrent", choices=("rnn", "lstm"), default="rnn")
     args = parser.parse_args()
+
+    if bool(args.replay_scenario) != bool(args.replay_output):
+        parser.error("--replay-scenario and --replay-output must be supplied together")
+
     root, study = args.experiment_dir, args.study_dir
     config, manifest, splits = _model_inputs(root)
     catalogue = build_catalogue(config)
@@ -103,7 +112,12 @@ def main() -> None:
     candidates = {"fixed": [FixedManager(catalogue[selected["fixed"]["settings"]["action_id"]])],
                   "adaptive": [AdaptiveManager(catalogue, config, **selected["adaptive"]["settings"])]}
 
-    for name, rate in dict.fromkeys((winner, ("adam", "0.001"), ("lstm", "0.001"))):
+    recipes = [winner, ("adam", "0.001"), ("lstm", "0.001")]
+
+    if args.replay_scenario:
+        recipes = [("adam", "0.001"), (args.recurrent, "0.001")]
+
+    for name, rate in dict.fromkeys(recipes):
         managers = []
         for seed in range(3):
             if name == "lstm":
@@ -115,6 +129,21 @@ def main() -> None:
             managers.append(MLPManager(model, catalogue, config))
 
         candidates[f"{name}-{rate}"] = managers
+
+    if args.replay_scenario:
+        from cafe.replay import capture
+
+        day = next((day for day in days if day.scenario_id == args.replay_scenario), None)
+
+        if day is None:
+            parser.error(f"unknown confirmation scenario {args.replay_scenario}")
+
+        managers = [candidates["fixed"][0], candidates["adaptive"][0],
+                    candidates["adam-0.001"][args.replay_seed],
+                    candidates[f"{args.recurrent}-0.001"][args.replay_seed]]
+        capture(day, managers, policy, config, args.opening, args.replay_seed, args.replay_output)
+
+        return
 
     _, results = select_managers(candidates, days, policy, config, workers=args.workers)
     (study / "confirmation.json").write_text(

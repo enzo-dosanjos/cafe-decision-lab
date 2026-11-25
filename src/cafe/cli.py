@@ -584,7 +584,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = sub.add_parser("report", help="build static figures and uncertainty tables from saved results")
     report.add_argument("--results-dir", type=Path, required=True)
     report.add_argument("--output-dir", type=Path, required=True)
+    replay = sub.add_parser("replay", help="render a synchronized PNG or MP4")
+    source = replay.add_mutually_exclusive_group(required=True)
+    source.add_argument("--demo", action="store_true")
+    source.add_argument("--input", type=Path)
+    replay.add_argument("--at")
+    replay.add_argument("--start")
+    replay.add_argument("--end")
+    replay.add_argument("--speed", type=float, default=2)
+    replay.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
+
+    if args.command == "replay":
+        from .replay import render
+
+        render(args)
+
+        return 0
+
 
     if args.command == "report":
         from .report import build_report
